@@ -25,6 +25,7 @@ export default function CaseForm() {
     priority: 'Medium Priority',
     caseType: '',
     scheduleTime: '',
+    hearingDate: '', // Added hearing date field
     location: '',
     clientId: '',
     status: 'Discovery',
@@ -148,6 +149,7 @@ export default function CaseForm() {
         priority: formData.priority,
         progress: parseInt(formData.progress),
         scheduleTime: formData.scheduleTime,
+        hearingDate: formData.hearingDate, // Added to submission
         status: formData.status,
         tasks: formData.tasks,
         clientId: formData.clientId,
@@ -173,6 +175,7 @@ export default function CaseForm() {
           priority: 'Medium Priority',
           caseType: '',
           scheduleTime: '',
+          hearingDate: '', // Reset hearing date
           location: '',
           clientId: '',
           status: 'Discovery',
@@ -312,7 +315,7 @@ export default function CaseForm() {
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  <FiCalendar className="inline mr-1" />
+                  <FiClock className="inline mr-1" />
                   Schedule Time
                 </label>
                 <input
@@ -322,6 +325,22 @@ export default function CaseForm() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="e.g., 9:00 AM - 12:00 PM"
+                />
+              </div>
+              
+              {/* Added Hearing Date Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <FiCalendar className="inline mr-1" />
+                  Hearing Date *
+                </label>
+                <input
+                  type="datetime-local"
+                  name="hearingDate"
+                  value={formData.hearingDate}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required
                 />
               </div>
               

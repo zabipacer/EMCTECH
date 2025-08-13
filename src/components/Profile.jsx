@@ -94,6 +94,20 @@ const Profile = () => {
       color: "from-gray-500 to-gray-600",
       path: "/viewclients"
     },
+       {
+      icon: FaCog,
+      title: "Edit cases",
+      description: "Change any info in cases",
+      color: "from-gray-500 to-gray-600",
+      path: "/edit-form"
+    },
+     {
+      icon: FaCog,
+      title: "Assigned cases",
+      description: "View All clients",
+      color: "from-gray-500 to-gray-600",
+      path: "/assignedcases"
+    },
     {
       icon: FaCog,
       title: "System Settings",

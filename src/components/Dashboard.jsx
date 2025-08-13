@@ -1,50 +1,145 @@
-import React, { useState } from 'react';
-import { createBrowserRouter, RouterProvider, Link, useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Scale, FileText } from 'lucide-react';
+// LegalCalendar.jsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Scale, Filter } from 'lucide-react';
 import { signOut } from 'firebase/auth';
-import { auth } from '../firebase/firebase';
+import { auth, db } from '../firebase/firebase';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  getDocs,
+  orderBy,
+  limit
+} from 'firebase/firestore';
 
-// Demo case objects
-const demoCases = [
-  { id: 1, date:   '2025-08-03', title: 'Case A: Contract Review' },
-  { id: 2, date: '2025-08-03', title: 'Case B: Client Meeting' },
-  { id: 3, date: '2025-08-07', title: 'Case C: Evidence Gathering' },
-  { id: 4, date: '2025-08-07', title: 'Case D: Filing Motion' },
-  { id: 5, date: '2025-08-12', title: 'Case E: Hearing Prep' },
-  { id: 6, date: '2025-08-15', title: 'Case F: Settlement Discussion' },
-  { id: 7, date: '2025-08-18', title: 'Case G: Expert Deposition' },
-  { id: 8, date: '2025-08-22', title: 'Case H: Discovery' },
-  { id: 9, date: '2025-08-25', title: 'Case I: Client Intake' },
-  { id: 10, date: '2025-08-28', title: 'Case J: Document Draft' },
-  { id: 11, date: '2025-08-30', title: 'Case K: Review Orders' }
-];
-
-// Legal Calendar Component
 const LegalCalendar = () => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [casesInMonth, setCasesInMonth] = useState([]);
+  const [casesData, setCasesData] = useState({}); // day -> cases array
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedCaseType, setSelectedCaseType] = useState('All');
+  const [availableCaseTypes, setAvailableCaseTypes] = useState(['All']);
 
-
-    const [currentDate, setCurrentDate] = useState(new Date());
   const navigate = useNavigate();
 
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const daysOfWeek = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Filter demo cases based on selected month & year
-  const casesInMonth = demoCases.filter(c => {
-    const d = new Date(c.date);
-    return d.getFullYear() === currentDate.getFullYear() && d.getMonth() === currentDate.getMonth();
-  });
+  // Helper function to parse hearingDate from your data structure
+  const parseHearingDate = (docData) => {
+    const dates = [];
+    
+    // Primary field: hearingDate (as shown in your data structure)
+    if (docData.hearingDate) {
+      const date = new Date(docData.hearingDate);
+      if (!isNaN(date.getTime())) {
+        dates.push(date);
+      }
+    }
+    
+    // Fallback fields for other possible date formats
+    if (docData.caseDate) {
+      if (typeof docData.caseDate === 'object' && typeof docData.caseDate.toDate === 'function') {
+        dates.push(docData.caseDate.toDate());
+      } else {
+        const date = new Date(docData.caseDate);
+        if (!isNaN(date.getTime())) {
+          dates.push(date);
+        }
+      }
+    }
+    
+    // Handle arrays of hearing dates
+    if (Array.isArray(docData.hearingDates)) {
+      docData.hearingDates.forEach(dateStr => {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          dates.push(date);
+        }
+      });
+    }
+    
+    return dates;
+  };
 
-  // Count cases per day
-  const casesData = casesInMonth.reduce((acc, c) => {
-    const day = new Date(c.date).getDate();
-    acc[day] = (acc[day] || 0) + 1;
-    return acc;
-  }, {});
+  // Filter cases by type
+  const filterCasesByType = (cases) => {
+    if (selectedCaseType === 'All') return cases;
+    return cases.filter(case_ => case_.caseType === selectedCaseType);
+  };
 
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    const casesCol = collection(db, 'cases');
+
+    // Fetch all cases and filter client-side since hearingDate is stored as string
+    const fetchAndFilterCases = async () => {
+      try {
+        const q = query(casesCol, orderBy('createdAt', 'desc'), limit(2000));
+        const snapshot = await getDocs(q);
+        
+        const allCases = [];
+        const caseTypes = new Set(['All']);
+        
+        snapshot.forEach(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          allCases.push(data);
+          
+          // Collect unique case types
+          if (data.caseType) {
+            caseTypes.add(data.caseType);
+          }
+        });
+
+        // Update available case types
+        setAvailableCaseTypes(Array.from(caseTypes));
+
+        // Filter cases for current month and organize by day
+        const dayData = {}; // day -> array of cases
+        const monthCases = [];
+
+        allCases.forEach(caseDoc => {
+          const hearingDates = parseHearingDate(caseDoc);
+          
+          hearingDates.forEach(dateObj => {
+            if (!dateObj) return;
+            
+            // Check if date is in current month
+            if (dateObj.getFullYear() === currentDate.getFullYear() && 
+                dateObj.getMonth() === currentDate.getMonth()) {
+              
+              const day = dateObj.getDate();
+              const caseWithDate = { ...caseDoc, hearingDate: dateObj };
+              
+              if (!dayData[day]) {
+                dayData[day] = [];
+              }
+              dayData[day].push(caseWithDate);
+              monthCases.push(caseWithDate);
+            }
+          });
+        });
+
+        setCasesData(dayData);
+        setCasesInMonth(monthCases);
+        setLoading(false);
+        
+      } catch (err) {
+        console.error('Error fetching cases:', err);
+        setError('Failed to load cases');
+        setLoading(false);
+      }
+    };
+
+    fetchAndFilterCases();
+  }, [currentDate]);
+
+  // Navigation and handlers
   const getDaysInMonth = date => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 
@@ -61,45 +156,67 @@ const LegalCalendar = () => {
   };
 
   const handleLogout = async () => {
-      try {
-        await signOut(auth);
-        navigate("/login");
-      } catch (err) {
-        console.error("Logout failed:", err);
-      }
-    };
+    try {
+      await signOut(auth);
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
 
   const renderCalendarDays = () => {
     const daysInMonth = getDaysInMonth(currentDate);
     const firstDay = getFirstDayOfMonth(currentDate);
     const cells = [];
 
-    // empty slots
-    for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} className="h-24 border border-gray-100"></div>);
+    // Empty cells for days before the first day of month
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(<div key={`empty-${i}`} className="h-24 border border-gray-100"></div>);
+    }
 
-    // days
-    for (let d = 1; d <= daysInMonth; d++) {
-      const count = casesData[d] || 0;
+    // Calendar days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayCases = casesData[day] || [];
+      const filteredCases = filterCasesByType(dayCases);
+      const count = filteredCases.length;
+      
       const isToday = (
-        d === new Date().getDate() &&
+        day === new Date().getDate() &&
         currentDate.getMonth() === new Date().getMonth() &&
         currentDate.getFullYear() === new Date().getFullYear()
       );
+
+      // Get case types for this day for color coding
+      const caseTypesOnDay = [...new Set(filteredCases.map(c => c.caseType))];
+      
       cells.push(
         <div
-          key={d}
-          onClick={() => handleDateClick(d)}
+          key={day}
+          onClick={() => handleDateClick(day)}
           className={`h-24 p-2 cursor-pointer rounded-lg transition-all duration-200 ease-in-out ${
             isToday 
               ? 'bg-blue-50 border-2 border-blue-400' 
               : 'bg-white border border-gray-100 hover:bg-gray-50'
           }`}
         >
-          <div className={`font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-800'}`}>{d}</div>
+          <div className={`font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-800'}`}>
+            {day}
+          </div>
+          
           {count > 0 && (
-            <div className="mt-1 inline-flex items-center text-xs font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-              <Scale className="w-3 h-3 mr-1" />
-              {count} case{count !== 1 && 's'}
+            <div className="space-y-1">
+              <div className="inline-flex items-center text-xs font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                <Scale className="w-3 h-3 mr-1" />
+                {count} case{count !== 1 && 's'}
+              </div>
+              
+              {/* Show case types if space allows */}
+              {caseTypesOnDay.length > 0 && (
+                <div className="text-xs text-gray-600 truncate">
+                  {caseTypesOnDay.slice(0, 2).join(', ')}
+                  {caseTypesOnDay.length > 2 && '...'}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -108,98 +225,120 @@ const LegalCalendar = () => {
     return cells;
   };
 
-  // Build year options +/- 5 years
-  const yearOptions = Array.from({ length: 11 }, (_, i) => currentDate.getFullYear() - 5 + i);
+  // Get filtered cases count for display
+  const getFilteredCasesCount = () => {
+    return filterCasesByType(casesInMonth).length;
+  };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-          <header className="bg-white shadow">
+      <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Owner Dashboard</h1>
-          <button
-            onClick={handleLogout}
+          <button 
+            onClick={handleLogout} 
             className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
           >
             Logout
           </button>
         </div>
       </header>
-      {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <div className="mb-4 md:mb-0">
+
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
+        <div className="mb-4 lg:mb-0">
           <h1 className="text-3xl font-bold text-gray-800 flex items-center">
             <CalendarIcon className="w-8 h-8 mr-3 text-blue-600" />
             Legal Calendar
           </h1>
           <p className="text-gray-600 mt-1">Track and manage your legal cases</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100">
-          <div className="text-sm text-gray-600">Cases this month</div>
-          <div className="text-2xl font-bold text-blue-700">{casesInMonth.length}</div>
+        
+        <div className="flex gap-4 items-center">
+          {/* Case Type Filter */}
+          <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100">
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedCaseType}
+                onChange={(e) => setSelectedCaseType(e.target.value)}
+                className="text-sm font-medium text-gray-700 bg-transparent border-none focus:outline-none cursor-pointer"
+              >
+                {availableCaseTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          {/* Cases Count */}
+          <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100">
+            <div className="text-sm text-gray-600">
+              {selectedCaseType === 'All' ? 'Cases this month' : `${selectedCaseType} cases`}
+            </div>
+            <div className="text-2xl font-bold text-blue-700">
+              {loading ? '...' : getFilteredCasesCount()}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Month & Year controls */}
+      {/* Month Navigation Controls */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center space-x-2 mb-4 md:mb-0">
             <button 
-              onClick={() => navigateMonth(-1)}
+              onClick={() => navigateMonth(-1)} 
               className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
             >
               <ChevronLeft className="w-5 h-5 text-gray-700" />
             </button>
-            
+
             <div className="flex space-x-2">
+              {/* Month Selector */}
               <div className="relative">
-                <select
-                  value={currentDate.getMonth()}
+                <select 
+                  value={currentDate.getMonth()} 
                   onChange={e => setCurrentDate(prev => {
                     const d = new Date(prev);
                     d.setMonth(+e.target.value);
                     return d;
-                  })}
+                  })} 
                   className="appearance-none bg-white border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {months.map((m, idx) => <option key={m} value={idx}>{m}</option>)}
+                  {months.map((month, idx) => (
+                    <option key={month} value={idx}>{month}</option>
+                  ))}
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
               </div>
-              
+
+              {/* Year Selector */}
               <div className="relative">
-                <select
-                  value={currentDate.getFullYear()}
+                <select 
+                  value={currentDate.getFullYear()} 
                   onChange={e => setCurrentDate(prev => {
                     const d = new Date(prev);
                     d.setFullYear(+e.target.value);
                     return d;
-                  })}
+                  })} 
                   className="appearance-none bg-white border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                  {Array.from({ length: 11 }, (_, i) => currentDate.getFullYear() - 5 + i).map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
                 </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
               </div>
             </div>
-            
+
             <button 
-              onClick={() => navigateMonth(1)}
+              onClick={() => navigateMonth(1)} 
               className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
             >
               <ChevronRight className="w-5 h-5 text-gray-700" />
             </button>
           </div>
-          
+
           <button 
-            onClick={() => setCurrentDate(new Date())}
+            onClick={() => setCurrentDate(new Date())} 
             className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
           >
             Today
@@ -207,26 +346,58 @@ const LegalCalendar = () => {
         </div>
       </div>
 
-      {/* Calendar grid */}
+      {/* Calendar Grid */}
       <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+        {/* Days of Week Header */}
         <div className="grid grid-cols-7 gap-2 mb-2">
-          {daysOfWeek.map(d => (
-            <div key={d} className="text-center font-semibold text-gray-600 py-2">
-              {d}
+          {daysOfWeek.map(day => (
+            <div key={day} className="text-center font-semibold text-gray-600 py-2">
+              {day}
             </div>
           ))}
         </div>
+        
+        {/* Calendar Days Grid */}
         <div className="grid grid-cols-7 gap-2">
-          {renderCalendarDays()}
+          {loading ? (
+            // Loading state
+            Array.from({ length: 35 }, (_, i) => (
+              <div key={i} className="h-24 border border-gray-100 bg-gray-50 animate-pulse rounded-lg"></div>
+            ))
+          ) : (
+            renderCalendarDays()
+          )}
         </div>
       </div>
 
-      <div className="text-sm text-gray-600 mt-4 flex items-center">
-        <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
-        Today's date highlighted
+      {/* Legend */}
+      <div className="flex items-center justify-between mt-4">
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center text-sm text-gray-600">
+            <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
+            Today's date highlighted
+          </div>
+          <div className="flex items-center text-sm text-gray-600">
+            <Scale className="w-3 h-3 mr-2 text-blue-600" />
+            Cases scheduled
+          </div>
+        </div>
+        
+        {selectedCaseType !== 'All' && (
+          <div className="text-sm text-gray-600">
+            Filtered by: <span className="font-medium text-blue-600">{selectedCaseType}</span>
+          </div>
+        )}
       </div>
+
+      {error && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-700 font-medium">Error</div>
+          <div className="text-red-600">{error}</div>
+        </div>
+      )}
     </div>
   );
 };
-export default LegalCalendar
-// Case List Component
+
+export default LegalCalendar;

@@ -17,6 +17,14 @@ import CaseForm from './components/Cases/CaseForm';
 import AdvancedCasesViewer from './components/Cases/CaseDashboard';
 import AddClientForm from './components/Clients/ClientForm';
 import ClientView from './components/Clients/ClientView';
+import OwnerAssignCases from './components/OwnerAssignCases';
+import OwnerManageUsers from './components/OwnerManageUsers';
+import AssignedCases from './components/Cases/AssignedCases';
+import CaseEditForm from './components/Clients/EditCaseForm';
+import ManageClients from './components/OwnerManageClients';
+import ManageAssociates from './components/OwnerManageAssociates';
+import LegalCalendar from './components/Dashboard';
+import Reports from './components/OwnerReprts';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -62,6 +70,14 @@ const App = () => {
             <Route path='/viewcases' element={<AdvancedCasesViewer/>}/>
       <Route path='/addclients' element={<AddClientForm/>}/>
            <Route path='/viewclients' element={<ClientView/>}/>
+                <Route path='/manage-cases' element={<OwnerAssignCases/>}/>
+        <Route path='/manage-users' element={<OwnerManageUsers/>}/>
+       <Route path='/assignedcases' element={<AssignedCases/>}/>
+        <Route path='/edit-form/:caseId' element={<CaseEditForm/>}/>
+      <Route path='/manage-clients' element={<ManageClients/>}/>
+        <Route path='/manage-associates' element={<ManageAssociates/>}/>
+       <Route path='/calendar' element={<LegalCalendar/>}/>
+         <Route path='/reports' element={<Reports/>}/>
      
       </Routes>
     </>
