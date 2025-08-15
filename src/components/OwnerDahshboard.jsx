@@ -336,13 +336,7 @@ export default function Profile() {
             + New Case
           </Link>
 
-          <Link
-            to="/settings"
-            className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-            aria-label="Go to settings"
-          >
-            Settings
-          </Link>
+    
         </div>
       </header>
 
