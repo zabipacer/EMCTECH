@@ -328,12 +328,13 @@ export default function Profile() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-400 text-white text-sm shadow hover:brightness-95 transition"
+          <Link
+          to={"/casesform"}
+            className="px-4 py-2 cursor-pointer rounded-lg bg-gradient-to-r from-blue-500 to-blue-400 text-white text-sm shadow hover:brightness-95 transition"
             aria-label="Create new case"
           >
             + New Case
-          </button>
+          </Link>
 
           <Link
             to="/settings"

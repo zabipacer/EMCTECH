@@ -1,8 +1,10 @@
+// src/pages/AssignedCases.jsx
 import React, { useEffect, useState } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../../firebase/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 import { onAuthStateChanged } from "firebase/auth";
+import { Link, useNavigate } from "react-router-dom";
 import {
   FiFolder,
   FiClock,
@@ -17,7 +19,9 @@ import {
   FiCalendar,
   FiDollarSign,
   FiTarget,
-  FiActivity
+  FiActivity,
+  FiEdit,
+  FiTrash2
 } from "react-icons/fi";
 
 export default function AssignedCases() {
@@ -25,6 +29,20 @@ export default function AssignedCases() {
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState(null);
   const [userId, setUserId] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    caseTitle: "",
+    caseDescription: "",
+    priority: "medium",
+    status: "active",
+    progress: 0,
+    caseValue: 0,
+    billableHours: 0,
+    documentsCount: 0,
+    totalTasks: 0
+  });
+  
+  const navigate = useNavigate();
 
   // Track logged-in user
   useEffect(() => {
@@ -96,6 +114,74 @@ export default function AssignedCases() {
     if (progress >= 50) return 'bg-yellow-500';
     if (progress >= 25) return 'bg-orange-500';
     return 'bg-red-500';
+  };
+
+  const handleDelete = async (caseId, e) => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this case?")) {
+      try {
+        await deleteDoc(doc(db, "cases", caseId));
+        setCases(cases.filter(c => c.id !== caseId));
+        if (selectedCase && selectedCase.id === caseId) {
+          setSelectedCase(null);
+        }
+      } catch (error) {
+        console.error("Error deleting case:", error);
+        alert("Failed to delete case. Please try again.");
+      }
+    }
+  };
+
+  const handleEdit = (caseItem) => {
+    setEditFormData({
+      id: caseItem.id,
+      caseTitle: caseItem.caseTitle,
+      caseDescription: caseItem.caseDescription,
+      priority: caseItem.priority || "medium",
+      status: caseItem.status || "active",
+      progress: caseItem.progress || 0,
+      caseValue: caseItem.caseValue || 0,
+      billableHours: caseItem.billableHours || 0,
+      documentsCount: caseItem.documentsCount || 0,
+      totalTasks: caseItem.totalTasks || 0
+    });
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const caseRef = doc(db, "cases", editFormData.id);
+      await updateDoc(caseRef, {
+        caseTitle: editFormData.caseTitle,
+        caseDescription: editFormData.caseDescription,
+        priority: editFormData.priority,
+        status: editFormData.status,
+        progress: Number(editFormData.progress),
+        caseValue: Number(editFormData.caseValue),
+        billableHours: Number(editFormData.billableHours),
+        documentsCount: Number(editFormData.documentsCount),
+        totalTasks: Number(editFormData.totalTasks)
+      });
+
+      // Update local state
+      setCases(cases.map(c => 
+        c.id === editFormData.id ? { ...c, ...editFormData } : c
+      ));
+
+      if (selectedCase && selectedCase.id === editFormData.id) {
+        setSelectedCase({ ...selectedCase, ...editFormData });
+      }
+
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Error updating case:", error);
+      alert("Failed to update case. Please try again.");
+    }
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
   };
 
   if (loading) {
@@ -208,8 +294,24 @@ export default function AssignedCases() {
                 </div>
 
                 {/* Hover indicator */}
-                <div className="px-6 py-3 bg-gray-50 rounded-b-xl border-t border-gray-100 group-hover:bg-blue-50 transition-colors">
-                  <p className="text-xs text-gray-500 group-hover:text-blue-600">Click to view details</p>
+                <div className="px-6 py-3 bg-gray-50 rounded-b-xl border-t border-gray-100 group-hover:bg-blue-50 transition-colors flex justify-between items-center">
+                  <p className="text-xs text-gray-500 group-hover:text-blue-600">
+                    Click to view details
+                  </p>
+                  <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link
+                    to={`/edit-form/${caseItem.id}`}
+                      className="p-2 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-full transition-colors"
+                    >
+                      <FiEdit className="h-4 w-4" />
+                    </Link>
+                    <button
+                      onClick={(e) => handleDelete(caseItem.id, e)}
+                      className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition-colors"
+                    >
+                      <FiTrash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -386,15 +488,196 @@ export default function AssignedCases() {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setSelectedCase(null)}
-                      className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between">
+                  <div className="flex space-x-2">
+                    <Link
+                      to={`edit-form/${selectedCase.id}`}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center"
                     >
-                      Close
+                      <FiEdit className="mr-2" /> Edit Case
+                    </Link>
+                    <button
+                      onClick={(e) => handleDelete(selectedCase.id, e)}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors flex items-center"
+                    >
+                      <FiTrash2 className="mr-2" /> Delete Case
                     </button>
                   </div>
+                  <button
+                    onClick={() => setSelectedCase(null)}
+                    className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Case Modal */}
+        <AnimatePresence>
+          {isEditing && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-white bg-opacity-20 rounded-lg">
+                        <FiEdit className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold">Edit Case</h2>
+                        <p className="text-blue-100 text-sm">Update case details</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                    >
+                      <FiX className="h-6 w-6" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Edit Form */}
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Case Title</label>
+                      <input
+                        type="text"
+                        name="caseTitle"
+                        value={editFormData.caseTitle}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Priority</label>
+                      <select
+                        name="priority"
+                        value={editFormData.priority}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Status</label>
+                      <select
+                        name="status"
+                        value={editFormData.status}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                        <option value="on hold">On Hold</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Progress (%)</label>
+                      <input
+                        type="number"
+                        name="progress"
+                        value={editFormData.progress}
+                        onChange={handleFormChange}
+                        min="0"
+                        max="100"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Case Value ($)</label>
+                      <input
+                        type="number"
+                        name="caseValue"
+                        value={editFormData.caseValue}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Billable Hours</label>
+                      <input
+                        type="number"
+                        name="billableHours"
+                        value={editFormData.billableHours}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Documents Count</label>
+                      <input
+                        type="number"
+                        name="documentsCount"
+                        value={editFormData.documentsCount}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Total Tasks</label>
+                      <input
+                        type="number"
+                        name="totalTasks"
+                        value={editFormData.totalTasks}
+                        onChange={handleFormChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6">
+                    <label className="block text-gray-700 font-medium mb-2">Case Description</label>
+                    <textarea
+                      name="caseDescription"
+                      value={editFormData.caseDescription}
+                      onChange={handleFormChange}
+                      rows="3"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    ></textarea>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center"
+                  >
+                    <FiCheckCircle className="mr-2" /> Save Changes
+                  </button>
                 </div>
               </motion.div>
             </motion.div>

@@ -1,9 +1,9 @@
-// CaseList.jsx
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Calendar as CalendarIcon, FileText, Clock, Briefcase, DollarSign, MapPin, ArrowUpRight, CheckCircle, ChevronDown, ChevronUp, Scale, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { db } from '../firebase/firebase';
-import { collection, query, where, onSnapshot, getDocs, orderBy, limit } from 'firebase/firestore';
+import { db, auth } from '../firebase/firebase';
+import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const CaseList = () => {
   const { date } = useParams();
@@ -12,14 +12,46 @@ const CaseList = () => {
   const [expandedCase, setExpandedCase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState('user'); // Default to 'user'
+
+  // Track authentication state and fetch user role
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        
+        // Fetch user role from Firestore
+        try {
+          const userDocRef = doc(db, 'Users', user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            setUserRole(userData.role || 'user'); // Use 'user' as default if role not set
+          } else {
+            setUserRole('user'); // Default role if user doc doesn't exist
+          }
+        } catch (err) {
+          console.error('Error fetching user role:', err);
+          setUserRole('user'); // Fallback to default role
+        }
+        
+      } else {
+        setCurrentUser(null);
+        setLoading(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const toggleExpand = (caseId) => setExpandedCase(prev => prev === caseId ? null : caseId);
 
-  // Updated function to parse hearingDate correctly from your data structure
+  // Parse hearing date from various possible fields
   const parseHearingDate = (docData) => {
     const dates = [];
     
-    // Primary field: hearingDate (as shown in your data structure)
+    // Primary field: hearingDate
     if (docData.hearingDate) {
       const date = new Date(docData.hearingDate);
       if (!isNaN(date.getTime())) {
@@ -27,7 +59,7 @@ const CaseList = () => {
       }
     }
     
-    // Fallback fields for other possible date formats
+    // Fallback fields
     if (docData.caseDate) {
       if (typeof docData.caseDate === 'object' && typeof docData.caseDate.toDate === 'function') {
         dates.push(docData.caseDate.toDate());
@@ -60,6 +92,8 @@ const CaseList = () => {
   };
 
   useEffect(() => {
+    if (!currentUser || !userRole) return; // Don't fetch if no user or role
+
     setLoading(true);
     setError(null);
     
@@ -68,14 +102,30 @@ const CaseList = () => {
     const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
     const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
 
-    const casesCol = collection(db, 'cases');
-
-    // Since hearingDate is stored as string, we'll fetch all cases and filter client-side
     const fetchAndFilterCases = async () => {
       try {
-        const q = query(casesCol, orderBy('createdAt', 'desc'), limit(2000));
-        const snapshot = await getDocs(q);
+        const casesCol = collection(db, 'cases');
+        let q;
         
+        // Conditionally build query based on role
+        if (userRole === 'user') {
+          // For 'user' role: fetch only assigned cases
+          q = query(
+            casesCol,
+            where('assignedTo', 'array-contains', currentUser.uid),
+            orderBy('createdAt', 'desc'),
+            limit(2000)
+          );
+        } else {
+          // For other roles (admin, etc.): fetch all cases
+          q = query(
+            casesCol,
+            orderBy('createdAt', 'desc'),
+            limit(2000)
+          );
+        }
+        
+        const snapshot = await getDocs(q);
         const allCases = [];
         snapshot.forEach(doc => {
           allCases.push({ id: doc.id, ...doc.data() });
@@ -95,7 +145,7 @@ const CaseList = () => {
                 ...caseDoc,
                 parsedHearingDate: dateObj // Store the parsed date for display
               });
-              break; // Found a match, no need to check other dates for this case
+              break; // Found a match, no need to check other dates
             }
           }
         });
@@ -111,7 +161,7 @@ const CaseList = () => {
     };
 
     fetchAndFilterCases();
-  }, [date]);
+  }, [date, currentUser, userRole]); // Added userRole as dependency
 
   const getStatusColor = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
@@ -158,6 +208,26 @@ const CaseList = () => {
     }
   };
 
+  // Handle unauthenticated users
+  if (currentUser === null) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto text-center">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
+          <h2 className="text-xl font-bold text-yellow-800 mb-4">Authentication Required</h2>
+          <p className="text-yellow-700 mb-6">
+            Please sign in to view your assigned cases
+          </p>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
@@ -189,6 +259,24 @@ const CaseList = () => {
     );
   }
 
+  // Dynamic header and card titles based on role
+  const headerText = userRole === 'user' 
+    ? `Your Assigned Cases for ${new Date(date).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })}`
+    : `All Cases for ${new Date(date).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })}`;
+
+  const casesTitle = userRole === 'user' ? 'Your Cases' : 'Total Cases';
+  const tasksTitle = userRole === 'user' ? 'Your Tasks' : 'Total Tasks';
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -200,23 +288,18 @@ const CaseList = () => {
           <ChevronLeft className="w-5 h-5 mr-1" /> Back to Calendar
         </button>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 ml-4">
-          Case Schedule for {new Date(date).toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
+          {headerText}
         </h1>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-blue-800">Total Cases</h3>
+          <h3 className="text-lg font-semibold text-blue-800">{casesTitle}</h3>
           <p className="text-3xl font-bold text-blue-900 mt-2">{cases.length}</p>
         </div>
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-purple-800">Total Tasks</h3>
+          <h3 className="text-lg font-semibold text-purple-800">{tasksTitle}</h3>
           <p className="text-3xl font-bold text-purple-900 mt-2">
             {cases.reduce((sum, c) => sum + (c.totalTasks || (c.tasks?.length || 0)), 0)}
           </p>
@@ -233,9 +316,21 @@ const CaseList = () => {
       {cases.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-md p-8 text-center border border-gray-100">
           <CalendarIcon className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">No cases scheduled</h3>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            {userRole === 'user' ? 'No cases assigned' : 'No cases found'}
+          </h3>
           <p className="text-gray-500 max-w-md mx-auto">
-            You have no cases scheduled for this date.
+            {userRole === 'user' 
+              ? `You have no assigned cases for ${new Date(date).toLocaleDateString('en-US', { 
+                  month: 'long', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                })}`
+              : `No cases found for ${new Date(date).toLocaleDateString('en-US', { 
+                  month: 'long', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                })}`}
           </p>
           <button 
             onClick={() => navigate(-1)} 
@@ -433,16 +528,18 @@ const CaseList = () => {
                           <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                             Add Document
                           </button>
-                          <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                          <button 
+                            onClick={() => navigate(`/case/${caseItem.id}`)}
+                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
                             View Full Case
                           </button>
-                  <button
-  onClick={() => navigate(`/edit-form/${caseItem.id}`)}
-  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
->
-  Edit Case
-</button>
-
+                          <button
+                            onClick={() => navigate(`/edit-form/${caseItem.id}`)}
+                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            Edit Case
+                          </button>
                         </div>
 
                         {/* Case Timestamps */}

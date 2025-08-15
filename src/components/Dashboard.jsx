@@ -8,31 +8,33 @@ import {
   collection,
   query,
   where,
-  onSnapshot,
   getDocs,
   orderBy,
-  limit
+  limit,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 
 const LegalCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [casesInMonth, setCasesInMonth] = useState([]);
-  const [casesData, setCasesData] = useState({}); // day -> cases array
+  const [casesData, setCasesData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCaseType, setSelectedCaseType] = useState('All');
   const [availableCaseTypes, setAvailableCaseTypes] = useState(['All']);
+  const [userRole, setUserRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const navigate = useNavigate();
 
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const daysOfWeek = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Helper function to parse hearingDate from your data structure
+  // Helper function to parse hearingDate
   const parseHearingDate = (docData) => {
     const dates = [];
     
-    // Primary field: hearingDate (as shown in your data structure)
     if (docData.hearingDate) {
       const date = new Date(docData.hearingDate);
       if (!isNaN(date.getTime())) {
@@ -40,7 +42,6 @@ const LegalCalendar = () => {
       }
     }
     
-    // Fallback fields for other possible date formats
     if (docData.caseDate) {
       if (typeof docData.caseDate === 'object' && typeof docData.caseDate.toDate === 'function') {
         dates.push(docData.caseDate.toDate());
@@ -52,7 +53,6 @@ const LegalCalendar = () => {
       }
     }
     
-    // Handle arrays of hearing dates
     if (Array.isArray(docData.hearingDates)) {
       docData.hearingDates.forEach(dateStr => {
         const date = new Date(dateStr);
@@ -71,36 +71,72 @@ const LegalCalendar = () => {
     return cases.filter(case_ => case_.caseType === selectedCaseType);
   };
 
+  // Fetch user role on component mount
   useEffect(() => {
+    const fetchUserRole = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setError('User not authenticated');
+        setLoading(false);
+        return;
+      }
+      
+      setCurrentUser(user);
+      
+      try {
+        const userDocRef = doc(db, 'Users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (userDocSnap.exists()) {
+          setUserRole(userDocSnap.data().role || 'user');
+        } else {
+          setUserRole('user');
+        }
+      } catch (err) {
+        console.error('Error fetching user role:', err);
+        setUserRole('user');
+      }
+    };
+
+    fetchUserRole();
+  }, []);
+
+  // Fetch cases based on user role
+  useEffect(() => {
+    if (!userRole || !currentUser) return;
+    
     setLoading(true);
     setError(null);
 
-    const casesCol = collection(db, 'cases');
-
-    // Fetch all cases and filter client-side since hearingDate is stored as string
     const fetchAndFilterCases = async () => {
       try {
-        const q = query(casesCol, orderBy('createdAt', 'desc'), limit(2000));
-        const snapshot = await getDocs(q);
+        const casesCol = collection(db, 'cases');
+        let q = query(casesCol, orderBy('createdAt', 'desc'), limit(2000));
         
+        // Add assignment filter for regular users
+        if (userRole === 'user') {
+          q = query(q, where('assignedTo', 'array-contains', currentUser.uid));
+        }
+
+        const snapshot = await getDocs(q);
         const allCases = [];
         const caseTypes = new Set(['All']);
         
         snapshot.forEach(doc => {
           const data = { id: doc.id, ...doc.data() };
-          allCases.push(data);
           
-          // Collect unique case types
-          if (data.caseType) {
-            caseTypes.add(data.caseType);
+          // Skip cases not assigned to user (if user role)
+          if (userRole === 'user' && 
+              (!data.assignedTo || !data.assignedTo.includes(currentUser.uid))) {
+            return;
           }
+          
+          allCases.push(data);
+          if (data.caseType) caseTypes.add(data.caseType);
         });
 
-        // Update available case types
         setAvailableCaseTypes(Array.from(caseTypes));
-
-        // Filter cases for current month and organize by day
-        const dayData = {}; // day -> array of cases
+        const dayData = {};
         const monthCases = [];
 
         allCases.forEach(caseDoc => {
@@ -109,16 +145,13 @@ const LegalCalendar = () => {
           hearingDates.forEach(dateObj => {
             if (!dateObj) return;
             
-            // Check if date is in current month
             if (dateObj.getFullYear() === currentDate.getFullYear() && 
                 dateObj.getMonth() === currentDate.getMonth()) {
               
               const day = dateObj.getDate();
               const caseWithDate = { ...caseDoc, hearingDate: dateObj };
               
-              if (!dayData[day]) {
-                dayData[day] = [];
-              }
+              if (!dayData[day]) dayData[day] = [];
               dayData[day].push(caseWithDate);
               monthCases.push(caseWithDate);
             }
@@ -137,9 +170,9 @@ const LegalCalendar = () => {
     };
 
     fetchAndFilterCases();
-  }, [currentDate]);
+  }, [currentDate, userRole, currentUser]);
 
-  // Navigation and handlers
+  // Calendar helper functions
   const getDaysInMonth = date => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 
@@ -169,12 +202,10 @@ const LegalCalendar = () => {
     const firstDay = getFirstDayOfMonth(currentDate);
     const cells = [];
 
-    // Empty cells for days before the first day of month
     for (let i = 0; i < firstDay; i++) {
       cells.push(<div key={`empty-${i}`} className="h-24 border border-gray-100"></div>);
     }
 
-    // Calendar days
     for (let day = 1; day <= daysInMonth; day++) {
       const dayCases = casesData[day] || [];
       const filteredCases = filterCasesByType(dayCases);
@@ -186,9 +217,6 @@ const LegalCalendar = () => {
         currentDate.getFullYear() === new Date().getFullYear()
       );
 
-      // Get case types for this day for color coding
-      const caseTypesOnDay = [...new Set(filteredCases.map(c => c.caseType))];
-      
       cells.push(
         <div
           key={day}
@@ -210,13 +238,10 @@ const LegalCalendar = () => {
                 {count} case{count !== 1 && 's'}
               </div>
               
-              {/* Show case types if space allows */}
-              {caseTypesOnDay.length > 0 && (
-                <div className="text-xs text-gray-600 truncate">
-                  {caseTypesOnDay.slice(0, 2).join(', ')}
-                  {caseTypesOnDay.length > 2 && '...'}
-                </div>
-              )}
+              <div className="text-xs text-gray-600 truncate">
+                {filteredCases.slice(0, 2).map(c => c.caseType).join(', ')}
+                {filteredCases.length > 2 && '...'}
+              </div>
             </div>
           )}
         </div>
@@ -225,7 +250,6 @@ const LegalCalendar = () => {
     return cells;
   };
 
-  // Get filtered cases count for display
   const getFilteredCasesCount = () => {
     return filterCasesByType(casesInMonth).length;
   };
@@ -234,7 +258,9 @@ const LegalCalendar = () => {
     <div className="p-6 max-w-6xl mx-auto">
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto py-6 px-4 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">Owner Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {userRole === 'user' ? 'My Cases' : 'Owner Dashboard'}
+          </h1>
           <button 
             onClick={handleLogout} 
             className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
@@ -250,11 +276,14 @@ const LegalCalendar = () => {
             <CalendarIcon className="w-8 h-8 mr-3 text-blue-600" />
             Legal Calendar
           </h1>
-          <p className="text-gray-600 mt-1">Track and manage your legal cases</p>
+          <p className="text-gray-600 mt-1">
+            {userRole === 'user' 
+              ? 'Your assigned cases' 
+              : 'Track and manage legal cases'}
+          </p>
         </div>
         
         <div className="flex gap-4 items-center">
-          {/* Case Type Filter */}
           <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100">
             <div className="flex items-center space-x-2">
               <Filter className="w-4 h-4 text-gray-500" />
@@ -270,7 +299,6 @@ const LegalCalendar = () => {
             </div>
           </div>
           
-          {/* Cases Count */}
           <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100">
             <div className="text-sm text-gray-600">
               {selectedCaseType === 'All' ? 'Cases this month' : `${selectedCaseType} cases`}
@@ -282,7 +310,6 @@ const LegalCalendar = () => {
         </div>
       </div>
 
-      {/* Month Navigation Controls */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center space-x-2 mb-4 md:mb-0">
@@ -294,7 +321,6 @@ const LegalCalendar = () => {
             </button>
 
             <div className="flex space-x-2">
-              {/* Month Selector */}
               <div className="relative">
                 <select 
                   value={currentDate.getMonth()} 
@@ -311,7 +337,6 @@ const LegalCalendar = () => {
                 </select>
               </div>
 
-              {/* Year Selector */}
               <div className="relative">
                 <select 
                   value={currentDate.getFullYear()} 
@@ -346,9 +371,7 @@ const LegalCalendar = () => {
         </div>
       </div>
 
-      {/* Calendar Grid */}
       <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-        {/* Days of Week Header */}
         <div className="grid grid-cols-7 gap-2 mb-2">
           {daysOfWeek.map(day => (
             <div key={day} className="text-center font-semibold text-gray-600 py-2">
@@ -357,10 +380,8 @@ const LegalCalendar = () => {
           ))}
         </div>
         
-        {/* Calendar Days Grid */}
         <div className="grid grid-cols-7 gap-2">
           {loading ? (
-            // Loading state
             Array.from({ length: 35 }, (_, i) => (
               <div key={i} className="h-24 border border-gray-100 bg-gray-50 animate-pulse rounded-lg"></div>
             ))
@@ -370,7 +391,6 @@ const LegalCalendar = () => {
         </div>
       </div>
 
-      {/* Legend */}
       <div className="flex items-center justify-between mt-4">
         <div className="flex items-center space-x-4">
           <div className="flex items-center text-sm text-gray-600">

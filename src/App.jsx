@@ -25,6 +25,7 @@ import ManageClients from './components/OwnerManageClients';
 import ManageAssociates from './components/OwnerManageAssociates';
 import LegalCalendar from './components/Dashboard';
 import Reports from './components/OwnerReprts';
+import Documents from './components/AssociateDocuments';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -78,6 +79,7 @@ const App = () => {
         <Route path='/manage-associates' element={<ManageAssociates/>}/>
        <Route path='/calendar' element={<LegalCalendar/>}/>
          <Route path='/reports' element={<Reports/>}/>
+        <Route path='/documents' element={<Documents/>}/>
      
       </Routes>
     </>
