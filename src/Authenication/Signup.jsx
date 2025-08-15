@@ -1,9 +1,10 @@
 // src/Authenication/Signup.js
 import React, { useState } from "react";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "../firebase/firebase";
 import { setDoc, doc } from "firebase/firestore";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 function Register() {
   const [email, setEmail] = useState("");
@@ -11,6 +12,8 @@ function Register() {
   const [fname, setFname] = useState("");
   const [lname, setLname] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -22,11 +25,12 @@ function Register() {
 
     try {
       setLoading(true);
+
       // create the Auth user
       await createUserWithEmailAndPassword(auth, email, password);
       const user = auth.currentUser;
 
-      // write to Firestore: everyone is role="user" and approved=false
+      // write to Firestore: role=user, approved=false
       if (user) {
         await setDoc(doc(db, "Users", user.uid), {
           email: user.email,
@@ -38,11 +42,16 @@ function Register() {
         });
       }
 
+      // Sign them out immediately after registering
+      await signOut(auth);
+
       toast.success(
         "Registered! Waiting for owner approval before you can log in.",
         { position: "top-center" }
       );
-      // optional: clear form or redirect
+
+      // Redirect to login
+      navigate("/login");
     } catch (error) {
       console.error("Registration Error:", error.message);
       const message = error.message.includes("email-already-in-use")
