@@ -23,9 +23,9 @@ export default function CaseForm() {
   const [formData, setFormData] = useState({
     caseTitle: '',
     priority: 'Medium Priority',
-    caseType: '',
+    caseType: 'Criminal', // Set to Criminal as requested
     scheduleTime: '',
-    hearingDate: '', // Added hearing date field
+    hearingDate: '',
     location: '',
     clientId: '',
     status: 'Discovery',
@@ -37,7 +37,14 @@ export default function CaseForm() {
     tasks: [
       { id: 1, text: '', completed: false },
       { id: 2, text: '', completed: false }
-    ]
+    ],
+    // New fields added here
+    caseNumber: '01/2025',
+    onBehalfOf: 'Accused',
+    partyName: 'Zohaib',
+    complainantName: 'State',
+    adjournDate: '17/08/2025',
+    underSection: '489 F'
   });
 
   const [clients, setClients] = useState([]);
@@ -149,14 +156,21 @@ export default function CaseForm() {
         priority: formData.priority,
         progress: parseInt(formData.progress),
         scheduleTime: formData.scheduleTime,
-        hearingDate: formData.hearingDate, // Added to submission
+        hearingDate: formData.hearingDate,
         status: formData.status,
         tasks: formData.tasks,
         clientId: formData.clientId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         completedTasks: formData.tasks.filter(task => task.completed).length,
-        totalTasks: formData.tasks.length
+        totalTasks: formData.tasks.length,
+        // Add new fields to Firestore document
+        caseNumber: formData.caseNumber,
+        onBehalfOf: formData.onBehalfOf,
+        partyName: formData.partyName,
+        complainantName: formData.complainantName,
+        adjournDate: formData.adjournDate,
+        underSection: formData.underSection
       };
       
       if (db) {
@@ -173,9 +187,9 @@ export default function CaseForm() {
         setFormData({
           caseTitle: '',
           priority: 'Medium Priority',
-          caseType: '',
+          caseType: 'Criminal',
           scheduleTime: '',
-          hearingDate: '', // Reset hearing date
+          hearingDate: '',
           location: '',
           clientId: '',
           status: 'Discovery',
@@ -187,7 +201,14 @@ export default function CaseForm() {
           tasks: [
             { id: 1, text: '', completed: false },
             { id: 2, text: '', completed: false }
-          ]
+          ],
+          // Reset new fields with default values
+          caseNumber: '01/2025',
+          onBehalfOf: 'Accused',
+          partyName: 'Zohaib',
+          complainantName: 'State',
+          adjournDate: '17/08/2025',
+          underSection: '489 F'
         });
         setClientSearch('');
         setSubmitMessage('');
@@ -258,6 +279,45 @@ export default function CaseForm() {
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* New Case Number Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Case Number *
+                </label>
+                <input
+                  type="text"
+                  name="caseNumber"
+                  value={formData.caseNumber}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., 01/2025"
+                  required
+                />
+              </div>
+              
+              {/* Case Type is now set to Criminal by default */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Case Type *
+                </label>
+                <select
+                  name="caseType"
+                  value={formData.caseType}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required
+                >
+                  <option value="Criminal">Criminal</option>
+                  <option>Intellectual Property</option>
+                  <option>Corporate Law</option>
+                  <option>Litigation</option>
+                  <option>Contract Law</option>
+                  <option>Employment Law</option>
+                  <option>Real Estate</option>
+                  <option>Family Law</option>
+                </select>
+              </div>
+              
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Case Title *
@@ -290,27 +350,55 @@ export default function CaseForm() {
                 </select>
               </div>
               
+              {/* New On Behalf Of Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Case Type *
+                  On Behalf Of *
                 </label>
                 <select
-                  name="caseType"
-                  value={formData.caseType}
+                  name="onBehalfOf"
+                  value={formData.onBehalfOf}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   required
                 >
-                  <option value="">Select case type</option>
-                  <option>Intellectual Property</option>
-                  <option>Corporate Law</option>
-                  <option>Litigation</option>
-                  <option>Contract Law</option>
-                  <option>Employment Law</option>
-                  <option>Real Estate</option>
-                  <option>Family Law</option>
-                  <option>Criminal Defense</option>
+                  <option value="Accused">Accused</option>
+                  <option value="Plaintiff">Plaintiff</option>
+                  <option value="Defendant">Defendant</option>
+                  <option value="Petitioner">Petitioner</option>
                 </select>
+              </div>
+              
+              {/* New Party Name Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Party Name *
+                </label>
+                <input
+                  type="text"
+                  name="partyName"
+                  value={formData.partyName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., Zohaib"
+                  required
+                />
+              </div>
+              
+              {/* New Complainant Name Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Complainant Name *
+                </label>
+                <input
+                  type="text"
+                  name="complainantName"
+                  value={formData.complainantName}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., State"
+                  required
+                />
               </div>
               
               <div>
@@ -328,7 +416,6 @@ export default function CaseForm() {
                 />
               </div>
               
-              {/* Added Hearing Date Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   <FiCalendar className="inline mr-1" />
@@ -340,6 +427,39 @@ export default function CaseForm() {
                   value={formData.hearingDate}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required
+                />
+              </div>
+              
+              {/* New Adjourn Date Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <FiCalendar className="inline mr-1" />
+                  Adjourn Date *
+                </label>
+                <input
+                  type="text"
+                  name="adjournDate"
+                  value={formData.adjournDate}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., 17/08/2025"
+                  required
+                />
+              </div>
+              
+              {/* New U/Sec Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  U/Sec or Nature of Suit *
+                </label>
+                <input
+                  type="text"
+                  name="underSection"
+                  value={formData.underSection}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., 489 F"
                   required
                 />
               </div>

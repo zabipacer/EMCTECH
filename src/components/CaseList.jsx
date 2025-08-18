@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Calendar as CalendarIcon, FileText, Clock, Briefcase, DollarSign, MapPin, ArrowUpRight, CheckCircle, ChevronDown, ChevronUp, Scale, User } from 'lucide-react';
+import { ChevronLeft, Calendar as CalendarIcon, FileText, Clock, Briefcase, DollarSign, MapPin, ArrowUpRight, CheckCircle, ChevronDown, ChevronUp, Scale, User, BookOpen, Shield, Gavel, Users, CalendarCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/firebase';
 import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
@@ -85,6 +85,21 @@ const CaseList = () => {
       const date = new Date(docData.scheduleDate);
       if (!isNaN(date.getTime())) {
         dates.push(date);
+      }
+    }
+    
+    // Check adjournDate if hearingDate is not available
+    if (dates.length === 0 && docData.adjournDate) {
+      // Try to parse adjournDate as a string in "DD/MM/YYYY" format
+      const parts = docData.adjournDate.split('/');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
+        const year = parseInt(parts[2], 10);
+        const date = new Date(year, month, day);
+        if (!isNaN(date.getTime())) {
+          dates.push(date);
+        }
       }
     }
     
@@ -203,6 +218,30 @@ const CaseList = () => {
         minute: '2-digit',
         hour12: true 
       });
+    } catch (err) {
+      return '—';
+    }
+  };
+
+  // Format date as DD/MM/YYYY
+  const formatDate = (dateString) => {
+    if (!dateString) return '—';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        // If it's already in DD/MM/YYYY format, return as is
+        if (typeof dateString === 'string' && dateString.includes('/')) {
+          return dateString;
+        }
+        return '—';
+      }
+      
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      
+      return `${day}/${month}/${year}`;
     } catch (err) {
       return '—';
     }
@@ -360,8 +399,9 @@ const CaseList = () => {
                       </div>
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
+                          {/* Display case number instead of ID */}
                           <h3 className="text-lg font-bold text-gray-800">
-                            Case #{caseItem.id?.slice(-6) || 'Unknown'}
+                            {caseItem.caseNumber || `Case #${caseItem.id?.slice(-6) || 'Unknown'}`}
                           </h3>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(caseItem.priority)}`}>
                             {caseItem.priority || 'Standard'}
@@ -376,7 +416,7 @@ const CaseList = () => {
                         </p>
                         <p className="text-gray-600 flex items-center">
                           <User className="w-4 h-4 mr-2" />
-                          Client ID: {caseItem.clientId || '—'}
+                          {caseItem.partyName ? `${caseItem.partyName} (${caseItem.onBehalfOf})` : '—'}
                         </p>
                       </div>
                     </div>
@@ -420,16 +460,55 @@ const CaseList = () => {
                         </h4>
                         <div className="space-y-3">
                           <div>
+                            <p className="text-sm text-gray-500">Case Number</p>
+                            <p className="font-medium">{caseItem.caseNumber || '—'}</p>
+                          </div>
+                          <div>
                             <p className="text-sm text-gray-500">Case Type</p>
                             <p className="font-medium">{caseItem.caseType || '—'}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-500">Client ID</p>
-                            <p className="font-medium">{caseItem.clientId || '—'}</p>
+                            <p className="text-sm text-gray-500">On Behalf Of</p>
+                            <p className="font-medium">{caseItem.onBehalfOf || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Party Name</p>
+                            <p className="font-medium">{caseItem.partyName || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Complainant Name</p>
+                            <p className="font-medium">{caseItem.complainantName || '—'}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Location</p>
                             <p className="font-medium">{caseItem.location || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Legal Details */}
+                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                        <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+                          <Gavel className="w-5 h-5 mr-2 text-purple-600" />
+                          Legal Details
+                        </h4>
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm text-gray-500">U/Sec or Nature of Suit</p>
+                            <p className="font-medium">{caseItem.underSection || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Hearing Date</p>
+                            <p className="font-medium">
+                              {caseItem.hearingDate ? 
+                                new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Adjourn Date</p>
+                            <p className="font-medium">
+                              {formatDate(caseItem.adjournDate) || '—'}
+                            </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Schedule Time</p>
@@ -437,9 +516,11 @@ const CaseList = () => {
                           </div>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Case Metrics */}
-                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    {/* Middle Column - Case Metrics */}
+                    <div className="lg:col-span-1">
+                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
                         <h4 className="font-bold text-gray-800 mb-4 flex items-center">
                           <Scale className="w-5 h-5 mr-2 text-purple-600" />
                           Case Metrics
@@ -470,6 +551,10 @@ const CaseList = () => {
                             </div>
                           </div>
                           <div>
+                            <p className="text-sm text-gray-500">Billable Hours</p>
+                            <p className="text-lg font-bold">{caseItem.billableHours || 0}</p>
+                          </div>
+                          <div>
                             <p className="text-sm text-gray-500">Case Value</p>
                             <p className="text-2xl font-bold text-green-700">
                               ${Number(caseItem.caseValue || 0).toLocaleString()}
@@ -480,7 +565,7 @@ const CaseList = () => {
                     </div>
 
                     {/* Right Column - Tasks and Actions */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-1">
                       <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
                         <div className="flex justify-between items-center mb-4">
                           <h4 className="font-bold text-gray-800">Tasks & Progress</h4>
@@ -490,7 +575,7 @@ const CaseList = () => {
                         </div>
 
                         {/* Tasks List */}
-                        <div className="space-y-3 mb-6">
+                        <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2">
                           {(caseItem.tasks || []).length > 0 ? (
                             caseItem.tasks.map(task => (
                               <div 
@@ -522,18 +607,7 @@ const CaseList = () => {
 
                         {/* Action Buttons */}
                         <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
-                          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                            Add Task
-                          </button>
-                          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                            Add Document
-                          </button>
-                          <button 
-                            onClick={() => navigate(`/case/${caseItem.id}`)}
-                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            View Full Case
-                          </button>
+                        
                           <button
                             onClick={() => navigate(`/edit-form/${caseItem.id}`)}
                             className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
