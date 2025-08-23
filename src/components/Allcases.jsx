@@ -12,13 +12,17 @@ import {
   FiX,
   FiCalendar,
   FiUser,
-  FiAlertCircle
+  FiAlertCircle,
+  FiClock,
+  FiMapPin,
+  FiDollarSign,
+  FiBook,
+  FiInfo
 } from 'react-icons/fi';
-import { db } from '../firebase/firebase';// Import your Firebase configuration
+import { db } from '../firebase/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-
 
 export default function AllCasesPage() {
   const [cases, setCases] = useState([]);
@@ -28,6 +32,8 @@ export default function AllCasesPage() {
   const [selectedCases, setSelectedCases] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedCase, setSelectedCase] = useState(null);
+  const [showCaseModal, setShowCaseModal] = useState(false);
 
   // Fetch cases from Firebase
   useEffect(() => {
@@ -38,7 +44,6 @@ export default function AllCasesPage() {
         
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          // Format the data to match our component structure
           casesData.push({
             id: doc.id,
             caseNumber: data.caseNumber || 'N/A',
@@ -47,6 +52,7 @@ export default function AllCasesPage() {
             complainantName: data.complainantName || 'Unknown Complainant',
             hearingDate: data.hearingDate || null,
             adjournDate: data.adjournDate || null,
+            adjournHistory: data.adjournHistory || [],
             caseStage: data.caseStage || 'Unknown Stage',
             progress: data.progress || 0,
             status: data.status || 'pending',
@@ -54,7 +60,9 @@ export default function AllCasesPage() {
             location: data.location || 'Unknown Location',
             caseValue: data.caseValue || 'N/A',
             createdAt: data.createdAt || new Date().toISOString(),
-            caseDescription: data.caseDescription || 'No description available'
+            caseDescription: data.caseDescription || 'No description available',
+            onBehalfOf: data.onBehalfOf || 'N/A',
+            clientId: data.clientId || 'N/A'
           });
         });
         
@@ -112,6 +120,12 @@ export default function AllCasesPage() {
     }
   };
 
+  // View case details
+  const viewCaseDetails = (caseItem) => {
+    setSelectedCase(caseItem);
+    setShowCaseModal(true);
+  };
+
   // Export selected cases as PDF
   const exportSelectedCases = () => {
     if (selectedCases.length === 0) {
@@ -133,23 +147,21 @@ export default function AllCasesPage() {
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
     
     // Add table using autoTable plugin
-
-
-autoTable(doc, {
-  startY: 30,
-  head: [['Case Number', 'Title', 'Parties', 'Stage', 'Status', 'Hearing Date']],
-  body: selectedCasesData.map(caseItem => [
-    caseItem.caseNumber,
-    caseItem.caseTitle,
-    `${caseItem.partyName} vs ${caseItem.complainantName}`,
-    caseItem.caseStage,
-    caseItem.status.charAt(0).toUpperCase() + caseItem.status.slice(1),
-    caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : 'Not scheduled'
-  ]),
-  theme: 'grid',
-  headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-  alternateRowStyles: { fillColor: [240, 240, 240] }
-});
+    autoTable(doc, {
+      startY: 30,
+      head: [['Case Number', 'Title', 'Parties', 'Stage', 'Status', 'Hearing Date']],
+      body: selectedCasesData.map(caseItem => [
+        caseItem.caseNumber,
+        caseItem.caseTitle,
+        `${caseItem.partyName} vs ${caseItem.complainantName}`,
+        caseItem.caseStage,
+        caseItem.status.charAt(0).toUpperCase() + caseItem.status.slice(1),
+        caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : 'Not scheduled'
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 240, 240] }
+    });
 
     // Add footer
     const pageCount = doc.internal.getNumberOfPages();
@@ -375,7 +387,10 @@ autoTable(doc, {
                         </span>
                       </td>
                       <td className="py-4 px-6">
-                        <button className="p-2 text-slate-500 hover:text-blue-600 transition-colors">
+                        <button 
+                          onClick={() => viewCaseDetails(caseItem)}
+                          className="p-2 text-slate-500 hover:text-blue-600 transition-colors"
+                        >
                           <FiFileText />
                         </button>
                       </td>
@@ -438,6 +453,182 @@ autoTable(doc, {
           )}
         </motion.div>
       </div>
+
+      {/* Case Details Modal */}
+      <AnimatePresence>
+        {showCaseModal && selectedCase && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-slate-800">Case Details</h2>
+                <button 
+                  onClick={() => setShowCaseModal(false)}
+                  className="p-2 text-slate-500 hover:text-slate-700 rounded-full hover:bg-slate-100"
+                >
+                  <FiX size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <FiInfo className="text-blue-600" />
+                      Basic Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Case Number:</span>
+                        <p className="text-slate-800">{selectedCase.caseNumber}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Case Title:</span>
+                        <p className="text-slate-800">{selectedCase.caseTitle}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Case Stage:</span>
+                        <p className="text-slate-800">{selectedCase.caseStage}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Under Section:</span>
+                        <p className="text-slate-800">{selectedCase.underSection}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <FiUser className="text-blue-600" />
+                      Parties Involved
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Party Name:</span>
+                        <p className="text-slate-800">{selectedCase.partyName}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Complainant Name:</span>
+                        <p className="text-slate-800">{selectedCase.complainantName}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">On Behalf Of:</span>
+                        <p className="text-slate-800">{selectedCase.onBehalfOf}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <FiCalendar className="text-blue-600" />
+                      Dates & Status
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Hearing Date:</span>
+                        <p className="text-slate-800">{formatDate(selectedCase.hearingDate)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Adjourn Date:</span>
+                        <p className="text-slate-800">{formatDate(selectedCase.adjournDate)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Status:</span>
+                        <span className={`inline-block px-2 py-1 text-xs rounded-full ${getStatusClass(selectedCase.status)}`}>
+                          {selectedCase.status}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Progress:</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-600 rounded-full"
+                              style={{ width: `${selectedCase.progress}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm text-slate-700">{selectedCase.progress}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <FiMapPin className="text-blue-600" />
+                      Additional Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Location:</span>
+                        <p className="text-slate-800">{selectedCase.location}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Case Value:</span>
+                        <p className="text-slate-800">{selectedCase.caseValue}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Client ID:</span>
+                        <p className="text-slate-800">{selectedCase.clientId}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-slate-50 p-4 rounded-lg mb-6">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <FiBook className="text-blue-600" />
+                    Case Description
+                  </h3>
+                  <p className="text-slate-700">{selectedCase.caseDescription}</p>
+                </div>
+                
+                {selectedCase.adjournHistory && selectedCase.adjournHistory.length > 0 && (
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <FiClock className="text-blue-600" />
+                      Adjournment History
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="text-left py-2 px-3 text-sm font-medium text-slate-600">Date</th>
+                            <th className="text-left py-2 px-3 text-sm font-medium text-slate-600">Reason</th>
+                            <th className="text-left py-2 px-3 text-sm font-medium text-slate-600">Updated At</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCase.adjournHistory.map((adjourn, index) => (
+                            <tr key={index} className="border-b border-slate-100 last:border-b-0">
+                              <td className="py-2 px-3 text-sm text-slate-700">{adjourn.date}</td>
+                              <td className="py-2 px-3 text-sm text-slate-700">{adjourn.reason}</td>
+                              <td className="py-2 px-3 text-sm text-slate-700">{formatDate(adjourn.updatedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 flex justify-end">
+                <button
+                  onClick={() => setShowCaseModal(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
