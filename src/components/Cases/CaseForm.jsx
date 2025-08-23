@@ -2,50 +2,75 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FiUser, 
-  FiPhone, 
-  FiMail, 
   FiFileText, 
-  FiClock, 
-  FiDollarSign,
   FiCalendar,
   FiMapPin,
-  FiPlus,
-  FiTrash2,
   FiSave,
   FiAlertCircle,
   FiChevronDown,
-  FiSearch
+  FiSearch,
+  FiDollarSign,
+  FiChevronLeft
 } from 'react-icons/fi';
 import { db } from '../../firebase/firebase';
 import { addDoc, collection, getDocs } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
 export default function CaseForm() {
+    const navigate = useNavigate();  
   const [formData, setFormData] = useState({
+    caseNumber: '',
     caseTitle: '',
-    priority: 'Medium Priority',
-    caseType: 'Criminal', // Set to Criminal as requested
-    scheduleTime: '',
-    hearingDate: '',
+    partyName: '',
+    complainantName: '',
     location: '',
-    clientId: '',
-    status: 'Discovery',
-    progress: 0,
-    documentsCount: 0,
-    billableHours: 0,
-    caseValue: '',
+    adjournDate: '',
+    hearingDate: '',
+    underSection: '',
     caseDescription: '',
-    tasks: [
-      { id: 1, text: '', completed: false },
-      { id: 2, text: '', completed: false }
-    ],
-    // New fields added here
-    caseNumber: '01/2025',
-    onBehalfOf: 'Accused',
-    partyName: 'Zohaib',
-    complainantName: 'State',
-    adjournDate: '17/08/2025',
-    underSection: '489 F'
+    onBehalfOf: '',
+    caseStage: '',
+    clientId: '',
+    progress: 0,
+    caseValue: ''
   });
+
+  const onBehalfOfOptions = [
+    'Notice Plaintiff',
+    'Adv to be Heard Complainant',
+    'Appearance of Defendant Respondent',
+    'Repeat Notice Opponent',
+    'Publication Applicant',
+    'Written Statement Appellant',
+    'Hearing Intervener',
+    'Objection Official Witness',
+    'Evidence Defendant',
+    'Framing of Charge Petitioner',
+    'Arguments Judgment Debtor',
+    'Statement of Accused Decree Holder',
+    'Trial',
+    'Order',
+    'Judgment',
+    'Other'
+  ];
+
+  const caseStageOptions = [
+    'FC Suit',
+    'Banking Suit',
+    'Criminal Case',
+    'Criminal Bail Application',
+    'Revision Application',
+    'Civil Appeal',
+    'Criminal Appeal',
+    'Family Suit',
+    'Guardian Case',
+    'Summary Suit',
+    'Session Case',
+    'Direct Complain',
+    'Petition',
+    'Banking Execution',
+    'Other'
+  ];
 
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
@@ -54,7 +79,6 @@ export default function CaseForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
 
-  // Fetch clients from Firestore
   useEffect(() => {
     const fetchClients = async () => {
       try {
@@ -66,7 +90,6 @@ export default function CaseForm() {
           }));
           setClients(clientsData);
         } else {
-          // Mock data for demo
           setClients([
             { id: 'client_ABC123', name: 'Acme Corp', email: 'contact@acme.com' },
             { id: 'client_DEF456', name: 'Globex Inc', email: 'info@globex.com' },
@@ -89,41 +112,6 @@ export default function CaseForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleTaskChange = (id, value) => {
-    setFormData(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(task => 
-        task.id === id ? { ...task, text: value } : task
-      )
-    }));
-  };
-
-  const toggleTaskComplete = (id) => {
-    setFormData(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(task => 
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    }));
-  };
-
-  const addTask = () => {
-    const newId = Math.max(0, ...formData.tasks.map(t => t.id)) + 1;
-    setFormData(prev => ({
-      ...prev,
-      tasks: [...prev.tasks, { id: newId, text: '', completed: false }]
-    }));
-  };
-
-  const removeTask = (id) => {
-    if (formData.tasks.length > 1) {
-      setFormData(prev => ({
-        ...prev,
-        tasks: prev.tasks.filter(task => task.id !== id)
-      }));
-    }
-  };
-
   const selectClient = (client) => {
     setFormData(prev => ({ ...prev, clientId: client.id }));
     setShowClientDropdown(false);
@@ -131,8 +119,24 @@ export default function CaseForm() {
   };
 
   const validateForm = () => {
-    const required = ['caseTitle', 'caseType', 'clientId', 'caseDescription'];
-    return required.every(field => formData[field].trim() !== '');
+    const required = [
+      'caseNumber', 
+      'caseTitle', 
+      'partyName', 
+      'complainantName', 
+      'adjournDate', 
+      'hearingDate', 
+      'underSection', 
+      'caseDescription',
+      'onBehalfOf',
+      'caseStage',
+      'clientId'
+    ];
+    
+    return required.every(field => {
+      const value = formData[field];
+      return value !== null && value !== undefined && String(value).trim() !== '';
+    });
   };
 
   const handleSubmit = async () => {
@@ -144,71 +148,49 @@ export default function CaseForm() {
     setIsSubmitting(true);
     
     try {
-      // Prepare data for Firebase
       const caseData = {
-        caseTitle: formData.caseTitle,
-        caseDescription: formData.caseDescription,
-        caseType: formData.caseType,
-        caseValue: formData.caseValue,
-        billableHours: parseFloat(formData.billableHours) || 0,
-        documentsCount: parseInt(formData.documentsCount) || 0,
-        location: formData.location,
-        priority: formData.priority,
-        progress: parseInt(formData.progress),
-        scheduleTime: formData.scheduleTime,
-        hearingDate: formData.hearingDate,
-        status: formData.status,
-        tasks: formData.tasks,
-        clientId: formData.clientId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedTasks: formData.tasks.filter(task => task.completed).length,
-        totalTasks: formData.tasks.length,
-        // Add new fields to Firestore document
         caseNumber: formData.caseNumber,
-        onBehalfOf: formData.onBehalfOf,
+        caseTitle: formData.caseTitle,
         partyName: formData.partyName,
         complainantName: formData.complainantName,
+        location: formData.location,
         adjournDate: formData.adjournDate,
-        underSection: formData.underSection
+        hearingDate: formData.hearingDate,
+        underSection: formData.underSection,
+        caseDescription: formData.caseDescription,
+        onBehalfOf: formData.onBehalfOf,
+        caseStage: formData.caseStage,
+        clientId: formData.clientId,
+        progress: parseInt(formData.progress) || 0,
+        caseValue: formData.caseValue,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
       
       if (db) {
         const docRef = await addDoc(collection(db, 'cases'), caseData);
         setSubmitMessage(`Case created successfully! Case ID: ${docRef.id}`);
       } else {
-        // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 1500));
         setSubmitMessage('Case created successfully! (Demo mode)');
       }
       
-      // Reset form after success
       setTimeout(() => {
         setFormData({
+          caseNumber: '',
           caseTitle: '',
-          priority: 'Medium Priority',
-          caseType: 'Criminal',
-          scheduleTime: '',
-          hearingDate: '',
+          partyName: '',
+          complainantName: '',
           location: '',
-          clientId: '',
-          status: 'Discovery',
-          progress: 0,
-          documentsCount: 0,
-          billableHours: 0,
-          caseValue: '',
+          adjournDate: '',
+          hearingDate: '',
+          underSection: '',
           caseDescription: '',
-          tasks: [
-            { id: 1, text: '', completed: false },
-            { id: 2, text: '', completed: false }
-          ],
-          // Reset new fields with default values
-          caseNumber: '01/2025',
-          onBehalfOf: 'Accused',
-          partyName: 'Zohaib',
-          complainantName: 'State',
-          adjournDate: '17/08/2025',
-          underSection: '489 F'
+          onBehalfOf: '',
+          caseStage: '',
+          clientId: '',
+          progress: 0,
+          caseValue: ''
         });
         setClientSearch('');
         setSubmitMessage('');
@@ -222,7 +204,6 @@ export default function CaseForm() {
     }
   };
 
-  // Filter clients based on search
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
     (client.email && client.email.toLowerCase().includes(clientSearch.toLowerCase()))
@@ -245,7 +226,6 @@ export default function CaseForm() {
     visible: { opacity: 1, y: 0 }
   };
 
-  // Find selected client for display
   const selectedClient = clients.find(c => c.id === formData.clientId);
 
   return (
@@ -256,7 +236,6 @@ export default function CaseForm() {
         variants={containerVariants}
         className="max-w-4xl mx-auto"
       >
-        {/* Header */}
         <motion.div variants={itemVariants} className="text-center mb-8">
           <h1 className="text-4xl font-bold text-slate-800 mb-2">Add New Case</h1>
           <p className="text-slate-600">Enter case details to create a new legal matter</p>
@@ -271,7 +250,6 @@ export default function CaseForm() {
         </motion.div>
 
         <div className="space-y-8">
-          {/* Case Overview Section */}
           <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center">
               <FiFileText className="mr-3 text-blue-600" />
@@ -279,7 +257,6 @@ export default function CaseForm() {
             </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* New Case Number Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Case Number *
@@ -293,29 +270,6 @@ export default function CaseForm() {
                   placeholder="e.g., 01/2025"
                   required
                 />
-              </div>
-              
-              {/* Case Type is now set to Criminal by default */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Case Type *
-                </label>
-                <select
-                  name="caseType"
-                  value={formData.caseType}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
-                >
-                  <option value="Criminal">Criminal</option>
-                  <option>Intellectual Property</option>
-                  <option>Corporate Law</option>
-                  <option>Litigation</option>
-                  <option>Contract Law</option>
-                  <option>Employment Law</option>
-                  <option>Real Estate</option>
-                  <option>Family Law</option>
-                </select>
               </div>
               
               <div>
@@ -335,24 +289,6 @@ export default function CaseForm() {
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Priority Level
-                </label>
-                <select
-                  name="priority"
-                  value={formData.priority}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-                  <option>Low Priority</option>
-                  <option>Medium Priority</option>
-                  <option>High Priority</option>
-                  <option>Urgent</option>
-                </select>
-              </div>
-              
-              {/* New On Behalf Of Field */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
                   On Behalf Of *
                 </label>
                 <select
@@ -362,14 +298,31 @@ export default function CaseForm() {
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   required
                 >
-                  <option value="Accused">Accused</option>
-                  <option value="Plaintiff">Plaintiff</option>
-                  <option value="Defendant">Defendant</option>
-                  <option value="Petitioner">Petitioner</option>
+                  <option value="">Select an option</option>
+                  {onBehalfOfOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
                 </select>
               </div>
               
-              {/* New Party Name Field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Case Stage *
+                </label>
+                <select
+                  name="caseStage"
+                  value={formData.caseStage}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required
+                >
+                  <option value="">Select an option</option>
+                  {caseStageOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+              
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Party Name *
@@ -380,12 +333,11 @@ export default function CaseForm() {
                   value={formData.partyName}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., Zohaib"
+                  placeholder="Enter party name"
                   required
                 />
               </div>
               
-              {/* New Complainant Name Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Complainant Name *
@@ -396,23 +348,8 @@ export default function CaseForm() {
                   value={formData.complainantName}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., State"
+                  placeholder="Enter complainant name"
                   required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  <FiClock className="inline mr-1" />
-                  Schedule Time
-                </label>
-                <input
-                  type="text"
-                  name="scheduleTime"
-                  value={formData.scheduleTime}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., 9:00 AM - 12:00 PM"
                 />
               </div>
               
@@ -431,27 +368,24 @@ export default function CaseForm() {
                 />
               </div>
               
-              {/* New Adjourn Date Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   <FiCalendar className="inline mr-1" />
                   Adjourn Date *
                 </label>
                 <input
-                  type="text"
+                  type="date"
                   name="adjournDate"
                   value={formData.adjournDate}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., 17/08/2025"
                   required
                 />
               </div>
               
-              {/* New U/Sec Field */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  U/Sec or Nature of Suit *
+                  Under Section / Nature of Suit *
                 </label>
                 <input
                   type="text"
@@ -464,7 +398,7 @@ export default function CaseForm() {
                 />
               </div>
               
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   <FiMapPin className="inline mr-1" />
                   Location
@@ -475,13 +409,45 @@ export default function CaseForm() {
                   value={formData.location}
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., Client Office"
+                  placeholder="Enter location"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Case Progress (%)
+                </label>
+                <input
+                  type="range"
+                  name="progress"
+                  min="0"
+                  max="100"
+                  value={formData.progress}
+                  onChange={handleInputChange}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer slider"
+                />
+                <div className="text-center mt-2 text-sm font-semibold text-slate-600">
+                  {formData.progress}%
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <FiDollarSign className="inline mr-1" />
+                  Case Value
+                </label>
+                <input
+                  type="text"
+                  name="caseValue"
+                  value={formData.caseValue}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="e.g., $15,000"
                 />
               </div>
             </div>
           </motion.div>
 
-          {/* Client Selection Section */}
           <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center">
               <FiUser className="mr-3 text-green-600" />
@@ -546,11 +512,6 @@ export default function CaseForm() {
                     <div>
                       <div className="font-semibold">{selectedClient.name}</div>
                       <div className="text-sm text-slate-600">{selectedClient.email}</div>
-                      {selectedClient.phone && (
-                        <div className="text-sm text-slate-600 mt-1">
-                          <FiPhone className="inline mr-2" /> {selectedClient.phone}
-                        </div>
-                      )}
                     </div>
                     <div className="text-xs text-slate-500">ID: {selectedClient.id}</div>
                   </div>
@@ -559,99 +520,13 @@ export default function CaseForm() {
             </div>
           </motion.div>
 
-          {/* Case Details Section */}
           <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center">
-              <FiClock className="mr-3 text-purple-600" />
-              Case Details
+              <FiFileText className="mr-3 text-purple-600" />
+              Case Description
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-                  <option>Discovery</option>
-                  <option>Investigation</option>
-                  <option>Negotiation</option>
-                  <option>Litigation</option>
-                  <option>Settlement</option>
-                  <option>Closed</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Progress (%)
-                </label>
-                <input
-                  type="range"
-                  name="progress"
-                  min="0"
-                  max="100"
-                  value={formData.progress}
-                  onChange={handleInputChange}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer slider"
-                />
-                <div className="text-center mt-2 text-sm font-semibold text-slate-600">
-                  {formData.progress}%
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Documents Count
-                </label>
-                <input
-                  type="number"
-                  name="documentsCount"
-                  value={formData.documentsCount}
-                  onChange={handleInputChange}
-                  min="0"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="0"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Billable Hours
-                </label>
-                <input
-                  type="number"
-                  name="billableHours"
-                  value={formData.billableHours}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.25"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="0"
-                />
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  <FiDollarSign className="inline mr-1" />
-                  Case Value
-                </label>
-                <input
-                  type="text"
-                  name="caseValue"
-                  value={formData.caseValue}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., $15,000"
-                />
-              </div>
-            </div>
-            
-            <div className="mt-6">
+            <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Case Description *
               </label>
@@ -667,59 +542,6 @@ export default function CaseForm() {
             </div>
           </motion.div>
 
-          {/* Tasks & Milestones Section */}
-          <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800 flex items-center">
-                <FiFileText className="mr-3 text-orange-600" />
-                Tasks & Milestones
-              </h2>
-              <button
-                type="button"
-                onClick={addTask}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <FiPlus className="mr-2" />
-                Add Task
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {formData.tasks.map((task, index) => (
-                <motion.div
-                  key={task.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center space-x-4 p-4 bg-slate-50 rounded-lg"
-                >
-                  <input
-                    type="checkbox"
-                    checked={task.completed}
-                    onChange={() => toggleTaskComplete(task.id)}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <input
-                    type="text"
-                    value={task.text}
-                    onChange={(e) => handleTaskChange(task.id, e.target.value)}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder={`Task ${index + 1}`}
-                  />
-                  {formData.tasks.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeTask(task.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <FiTrash2 />
-                    </button>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Submit Button */}
           <motion.div variants={itemVariants} className="text-center">
             {submitMessage && (
               <div className={`mb-4 p-4 rounded-lg flex items-center justify-center ${
@@ -753,6 +575,13 @@ export default function CaseForm() {
                 </>
               )}
             </motion.button>
+               <motion.button
+            onClick={() => navigate(-1)}
+            className="px-12 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center mx-auto crsor-pointer hover:text-slate-800 mb-4 transition-colors mx-auto md:mx-0"
+          >
+            <FiChevronLeft className="mr-1" />
+            Go Back
+          </motion.button>
           </motion.div>
         </div>
       </motion.div>

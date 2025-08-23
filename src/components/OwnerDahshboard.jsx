@@ -28,6 +28,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
+import LegalCalendar from "./Dashboard";
 
 // ----------  REPLACE with your Firebase config ----------
 
@@ -259,6 +260,15 @@ export default function Profile() {
       });
     };
   }, []); // run once
+   const handleLogout = async () => {
+      try {
+        await signOut(auth);
+        navigate('/login');
+      } catch (err) {
+        console.error('Logout failed:', err);
+      }
+    };
+  
 
   // Derived analytics from cases
   const totalCases = cases.length;
@@ -304,6 +314,8 @@ export default function Profile() {
     { to: "/manage-associates", title: "Manage Associates", icon: <FiUserCheck size={18} /> },
     { to: "/calendar", title: "Calendar / Diary", icon: <FiCalendar size={18} /> },
     { to: "/reports", title: "Reports", icon: <FiFileText size={18} /> },
+    { to: "/allcases", title: "All Cases", icon: <FiFileText size={18} /> },
+
   ];
 
   // analytics data arranged for UI
@@ -314,6 +326,7 @@ export default function Profile() {
     { key: "totalClients", label: "Total Clients", value: clientsCount, icon: <FiUsers size={20} /> },
     { key: "associates", label: "Associates Count", value: associatesCount, icon: <FiUserCheck size={20} /> },
     { key: "pendingTasks", label: "Pending Tasks", value: pendingTasksCount, icon: <FiClock size={20} /> },
+    
   ];
 
   return (
@@ -335,6 +348,14 @@ export default function Profile() {
           >
             + New Case
           </Link>
+          <Link
+          to={"/manage-clients"}
+            className="px-4 py-2 cursor-pointer rounded-lg bg-gradient-to-r from-blue-500 to-blue-400 text-white text-sm shadow hover:brightness-95 transition"
+            aria-label="Create new case"
+          >
+            + New Client
+          </Link>
+            
 
     
         </div>
@@ -360,7 +381,7 @@ export default function Profile() {
           ))}
         </motion.div>
       </section>
-
+<LegalCalendar/>
       {/* Quick Actions */}
       <section className="mb-8">
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Quick Actions</h2>

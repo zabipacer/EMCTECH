@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Calendar as CalendarIcon, FileText, Clock, Briefcase, DollarSign, MapPin, ArrowUpRight, CheckCircle, ChevronDown, ChevronUp, Scale, User, BookOpen, Shield, Gavel, Users, CalendarCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebase/firebase';
-import { collection, query, where, getDocs, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { db,auth } from '../firebase/firebase';
+import { collection, query, where, getDocs, orderBy, limit, doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const CaseList = () => {
@@ -13,7 +13,8 @@ const CaseList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [userRole, setUserRole] = useState('user'); // Default to 'user'
+  const [userRole, setUserRole] = useState('user');
+  const [adjournModal, setAdjournModal] = useState(null);
 
   // Track authentication state and fetch user role
   useEffect(() => {
@@ -28,13 +29,13 @@ const CaseList = () => {
           
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            setUserRole(userData.role || 'user'); // Use 'user' as default if role not set
+            setUserRole(userData.role || 'user');
           } else {
-            setUserRole('user'); // Default role if user doc doesn't exist
+            setUserRole('user');
           }
         } catch (err) {
           console.error('Error fetching user role:', err);
-          setUserRole('user'); // Fallback to default role
+          setUserRole('user');
         }
         
       } else {
@@ -89,30 +90,36 @@ const CaseList = () => {
     }
     
     // Check adjournDate if hearingDate is not available
-    if (dates.length === 0 && docData.adjournDate) {
-      // Try to parse adjournDate as a string in "DD/MM/YYYY" format
-      const parts = docData.adjournDate.split('/');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
-        const year = parseInt(parts[2], 10);
-        const date = new Date(year, month, day);
-        if (!isNaN(date.getTime())) {
-          dates.push(date);
-        }
-      }
+      // Check if hearingDate is already set (from adjournment)
+  if (dates.length === 0 && docData.hearingDate) {
+    const date = new Date(docData.hearingDate);
+    if (!isNaN(date.getTime())) {
+      dates.push(date);
     }
-    
-    return dates;
-  };
-
+  }
+  
+  return dates;
+};
   useEffect(() => {
-    if (!currentUser || !userRole) return; // Don't fetch if no user or role
+    if (!currentUser || !userRole) return;
 
     setLoading(true);
     setError(null);
     
+    // Add null check for date before splitting
+    if (!date) {
+      setError('Invalid date parameter');
+      setLoading(false);
+      return;
+    }
+    
     const parts = date.split('-'); // expecting YYYY-MM-DD
+    if (parts.length !== 3) {
+      setError('Invalid date format');
+      setLoading(false);
+      return;
+    }
+    
     const year = +parts[0], month = +parts[1] - 1, day = +parts[2];
     const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
     const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
@@ -176,7 +183,7 @@ const CaseList = () => {
     };
 
     fetchAndFilterCases();
-  }, [date, currentUser, userRole]); // Added userRole as dependency
+  }, [date, currentUser, userRole]);
 
   const getStatusColor = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
@@ -246,6 +253,47 @@ const CaseList = () => {
       return '—';
     }
   };
+
+  // Adjourn case function
+
+
+const adjournCase = async (caseId, newDate, reason) => {
+  try {
+    const caseRef = doc(db, 'cases', caseId);
+    
+    await updateDoc(caseRef, {
+      hearingDate: newDate,  // Update hearingDate instead of adjournDate
+      adjournHistory: arrayUnion({
+        date: newDate,
+        reason: reason,
+        updatedAt: new Date().toISOString()
+      })
+    });
+
+    // Update local state
+    setCases(cases.map(c => 
+      c.id === caseId 
+        ? {
+            ...c, 
+            hearingDate: newDate,  // Update hearingDate in local state
+            adjournHistory: [
+              ...(c.adjournHistory || []), 
+              { date: newDate, reason, updatedAt: new Date().toISOString() }
+            ]
+          }
+        : c
+    ));
+
+    setAdjournModal(null);
+    alert('Case adjourned successfully!');
+  } catch (error) {
+    console.error('Error adjourning case:', error);
+    alert('Failed to adjourn case');
+  }
+};
+
+
+
 
   // Handle unauthenticated users
   if (currentUser === null) {
@@ -337,12 +385,7 @@ const CaseList = () => {
           <h3 className="text-lg font-semibold text-blue-800">{casesTitle}</h3>
           <p className="text-3xl font-bold text-blue-900 mt-2">{cases.length}</p>
         </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-purple-800">{tasksTitle}</h3>
-          <p className="text-3xl font-bold text-purple-900 mt-2">
-            {cases.reduce((sum, c) => sum + (c.totalTasks || (c.tasks?.length || 0)), 0)}
-          </p>
-        </div>
+       
         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-100 shadow-sm">
           <h3 className="text-lg font-semibold text-green-800">Total Value</h3>
           <p className="text-3xl font-bold text-green-900 mt-2">
@@ -398,11 +441,15 @@ const CaseList = () => {
                         <Briefcase className="w-5 h-5 text-blue-700" />
                       </div>
                       <div className="flex-1">
+                        {/* Make case title the most prominent element */}
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">
+                          {caseItem.caseTitle || 'Untitled Case'}
+                        </h3>
                         <div className="flex flex-wrap items-center gap-2 mb-2">
-                          {/* Display case number instead of ID */}
-                          <h3 className="text-lg font-bold text-gray-800">
-                            {caseItem.caseNumber || `Case #${caseItem.id?.slice(-6) || 'Unknown'}`}
-                          </h3>
+                          {/* Display case number as secondary info */}
+                          <span className="text-sm text-gray-600">
+                            Case #: {caseItem.caseNumber || `#${caseItem.id?.slice(-6) || 'Unknown'}`}
+                          </span>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(caseItem.priority)}`}>
                             {caseItem.priority || 'Standard'}
                           </span>
@@ -411,12 +458,13 @@ const CaseList = () => {
                           </span>
                         </div>
                         <p className="text-gray-600 flex items-center mb-1">
-                          <Scale className="w-4 h-4 mr-2" />
-                          {caseItem.caseType || 'General'}
-                        </p>
-                        <p className="text-gray-600 flex items-center">
                           <User className="w-4 h-4 mr-2" />
                           {caseItem.partyName ? `${caseItem.partyName} (${caseItem.onBehalfOf})` : '—'}
+                        </p>
+                        <p className="text-gray-600 flex items-center">
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                          {caseItem.hearingDate ? 
+                            new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
                         </p>
                       </div>
                     </div>
@@ -446,192 +494,237 @@ const CaseList = () => {
                 </div>
               </div>
 
-              {/* Expanded Case Details */}
-              {expandedCase === caseItem.id && (
-                <div className="border-t border-gray-100 px-5 py-6 bg-gray-50">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left Column - Case Info */}
-                    <div className="lg:col-span-1 space-y-4">
-                      {/* Case Overview */}
-                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <h4 className="font-bold text-gray-800 mb-4 flex items-center">
-                          <FileText className="w-5 h-5 mr-2 text-blue-600" />
-                          Case Overview
-                        </h4>
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-sm text-gray-500">Case Number</p>
-                            <p className="font-medium">{caseItem.caseNumber || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Case Type</p>
-                            <p className="font-medium">{caseItem.caseType || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">On Behalf Of</p>
-                            <p className="font-medium">{caseItem.onBehalfOf || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Party Name</p>
-                            <p className="font-medium">{caseItem.partyName || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Complainant Name</p>
-                            <p className="font-medium">{caseItem.complainantName || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Location</p>
-                            <p className="font-medium">{caseItem.location || '—'}</p>
-                          </div>
-                        </div>
-                      </div>
+              {/* Expanded Case Details - Only show fields from the form */}
+           {/* Expanded Case Details - Only show fields from the form */}
+  {expandedCase === caseItem.id && (
+    <div className="border-t border-gray-100 px-5 py-6 bg-gray-50">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Case Info */}
+        <div className="space-y-4">
+          {/* Case Overview */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-blue-600" />
+              Case Overview
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-500">Case Title</p>
+                <p className="font-medium">{caseItem.caseTitle || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Case Number</p>
+                <p className="font-medium">{caseItem.caseNumber || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">On Behalf Of</p>
+                <p className="font-medium">{caseItem.onBehalfOf || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Case Stage</p>
+                <p className="font-medium">{caseItem.caseStage || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Party Name</p>
+                <p className="font-medium">{caseItem.partyName || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Complainant Name</p>
+                <p className="font-medium">{caseItem.complainantName || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Location</p>
+                <p className="font-medium">{caseItem.location || '—'}</p>
+              </div>
+            </div>
+          </div>
 
-                      {/* Legal Details */}
-                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                        <h4 className="font-bold text-gray-800 mb-4 flex items-center">
-                          <Gavel className="w-5 h-5 mr-2 text-purple-600" />
-                          Legal Details
-                        </h4>
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-sm text-gray-500">U/Sec or Nature of Suit</p>
-                            <p className="font-medium">{caseItem.underSection || '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Hearing Date</p>
-                            <p className="font-medium">
-                              {caseItem.hearingDate ? 
-                                new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Adjourn Date</p>
-                            <p className="font-medium">
-                              {formatDate(caseItem.adjournDate) || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Schedule Time</p>
-                            <p className="font-medium">{caseItem.scheduleTime || '—'}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Middle Column - Case Metrics */}
-                    <div className="lg:col-span-1">
-                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
-                        <h4 className="font-bold text-gray-800 mb-4 flex items-center">
-                          <Scale className="w-5 h-5 mr-2 text-purple-600" />
-                          Case Metrics
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-sm text-gray-500">Progress</p>
-                              <p className="text-sm font-medium">{caseItem.progress || 0}%</p>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                                style={{width: `${caseItem.progress || 0}%`}}
-                              ></div>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-sm text-gray-500">Documents</p>
-                              <p className="text-lg font-bold">{caseItem.documentsCount || 0}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">Tasks</p>
-                              <p className="text-lg font-bold">
-                                {caseItem.completedTasks || 0}/{caseItem.totalTasks || 0}
-                              </p>
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Billable Hours</p>
-                            <p className="text-lg font-bold">{caseItem.billableHours || 0}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-gray-500">Case Value</p>
-                            <p className="text-2xl font-bold text-green-700">
-                              ${Number(caseItem.caseValue || 0).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Column - Tasks and Actions */}
-                    <div className="lg:col-span-1">
-                      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 h-full">
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="font-bold text-gray-800">Tasks & Progress</h4>
-                          <span className="text-sm text-gray-500">
-                            {caseItem.completedTasks || 0} of {caseItem.totalTasks || 0} completed
-                          </span>
-                        </div>
-
-                        {/* Tasks List */}
-                        <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2">
-                          {(caseItem.tasks || []).length > 0 ? (
-                            caseItem.tasks.map(task => (
-                              <div 
-                                key={task.id} 
-                                className="flex items-start p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
-                              >
-                                {task.completed ? (
-                                  <CheckCircle className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full border-2 border-gray-300 mr-3 mt-0.5 flex-shrink-0"></div>
-                                )}
-                                <div className="flex-1">
-                                  <p className={`${task.completed ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
-                                    {task.text || task.name || 'Untitled Task'}
-                                  </p>
-                                </div>
-                                <button className="ml-2 text-gray-400 hover:text-gray-600 transition-colors">
-                                  <ArrowUpRight className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="text-center py-8 text-gray-500">
-                              <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                              <p>No tasks assigned to this case</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
-                        
-                          <button
-                            onClick={() => navigate(`/edit-form/${caseItem.id}`)}
-                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            Edit Case
-                          </button>
-                        </div>
-
-                        {/* Case Timestamps */}
-                        <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 flex justify-between">
-                          <span>
-                            Created: {caseItem.createdAt ? new Date(caseItem.createdAt).toLocaleDateString() : '—'}
-                          </span>
-                          <span>
-                            Updated: {caseItem.updatedAt ? new Date(caseItem.updatedAt).toLocaleDateString() : '—'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+          {/* Legal Details */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+              <Gavel className="w-5 h-5 mr-2 text-purple-600" />
+              Legal Details
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-500">U/Sec or Nature of Suit</p>
+                <p className="font-medium">{caseItem.underSection || '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Hearing Date</p>
+                <p className="font-medium">
+                  {caseItem.hearingDate ? 
+                    new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Adjourn Date</p>
+                <p className="font-medium">
+                  {formatDate(caseItem.adjournDate) || '—'}
+                </p>
+              </div>
+              {caseItem.adjournReason && (
+                <div>
+                  <p className="text-sm text-gray-500">Adjourn Reason</p>
+                  <p className="font-medium">{caseItem.adjournReason || '—'}</p>
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Right Column - Case Metrics and Description */}
+        <div className="space-y-4">
+          {/* Case Metrics */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+              <Scale className="w-5 h-5 mr-2 text-purple-600" />
+              Case Metrics
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm text-gray-500">Progress</p>
+                  <p className="text-sm font-medium">{caseItem.progress || 0}%</p>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                    style={{width: `${caseItem.progress || 0}%`}}
+                  ></div>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Case Value</p>
+                <p className="text-2xl font-bold text-green-700">
+                  ${Number(caseItem.caseValue || 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Case Description */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-blue-600" />
+              Case Description
+            </h4>
+            <p className="text-gray-700">
+              {caseItem.caseDescription || 'No description provided.'}
+            </p>
+          </div>
+
+          {/* Adjourn History Section - NEW */}
+          {caseItem.adjournHistory && caseItem.adjournHistory.length > 0 && (
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+              <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+                <CalendarCheck className="w-5 h-5 mr-2 text-blue-600" />
+                Adjournment History
+              </h4>
+              <div className="space-y-3">
+                {caseItem.adjournHistory.map((adjournment, index) => (
+                  <div key={index} className="border-l-4 border-blue-200 pl-3 py-2">
+                    <div className="flex justify-between items-start">
+                      <p className="font-medium text-gray-800">
+                        {adjournment.date ? new Date(adjournment.date).toLocaleDateString() : 'No date'}
+                      </p>
+                      <span className="text-xs text-gray-500">
+                        {adjournment.updatedAt ? new Date(adjournment.updatedAt).toLocaleDateString() : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {adjournment.reason || 'No reason provided'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setAdjournModal(caseItem)}
+                className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+              >
+                Adjourn Case
+              </button>
+              <button
+                onClick={() => navigate(`/edit-form/${caseItem.id}`)}
+                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Edit Case
+              </button>
+            </div>
+
+            {/* Case Timestamps */}
+            <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 flex justify-between">
+              <span>
+                Created: {caseItem.createdAt ? new Date(caseItem.createdAt).toLocaleDateString() : '—'}
+              </span>
+              <span>
+                Updated: {caseItem.updatedAt ? new Date(caseItem.updatedAt).toLocaleDateString() : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
+            </div>
           ))}
+        </div>
+      )}
+
+      {/* Adjourn Modal */}
+      {adjournModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Adjourn Case</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">New Date</label>
+                <input
+                  type="date"
+                  className="w-full p-2 border rounded-lg"
+                  id="adjournDate"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Reason</label>
+                <textarea
+                  className="w-full p-2 border rounded-lg"
+                  rows="3"
+                  id="adjournReason"
+                  placeholder="Enter reason for adjournment"
+                ></textarea>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setAdjournModal(null)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const newDate = document.getElementById('adjournDate').value;
+                    const reason = document.getElementById('adjournReason').value;
+                    if (newDate && reason) {
+                      adjournCase(adjournModal.id, newDate, reason);
+                    } else {
+                      alert('Please provide both date and reason');
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Confirm Adjournment
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
