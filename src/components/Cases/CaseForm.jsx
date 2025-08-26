@@ -10,14 +10,15 @@ import {
   FiChevronDown,
   FiSearch,
   FiDollarSign,
-  FiChevronLeft
+  FiChevronLeft,
+  FiX
 } from 'react-icons/fi';
 import { db } from '../../firebase/firebase';
 import { addDoc, collection, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 export default function CaseForm() {
-    const navigate = useNavigate();  
+  const navigate = useNavigate();  
   const [formData, setFormData] = useState({
     caseNumber: '',
     caseTitle: '',
@@ -32,45 +33,97 @@ export default function CaseForm() {
     caseStage: '',
     clientId: '',
     progress: 0,
-    caseValue: ''
+    caseValue: '',
+    caseType: '',
+    court: ''
   });
 
   const onBehalfOfOptions = [
-    'Notice Plaintiff',
-    'Adv to be Heard Complainant',
-    'Appearance of Defendant Respondent',
-    'Repeat Notice Opponent',
-    'Publication Applicant',
-    'Written Statement Appellant',
-    'Hearing Intervener',
-    'Objection Official Witness',
-    'Evidence Defendant',
-    'Framing of Charge Petitioner',
-    'Arguments Judgment Debtor',
-    'Statement of Accused Decree Holder',
-    'Trial',
-    'Order',
-    'Judgment',
-    'Other'
+    'plaintiff',
+    'complainant',
+    'respondent',
+    'opponent',
+    'applicant',
+    'appellant',
+    'intervener',
+    'official witness',
+    'defendant',
+    'petitioner',
+    'judgment debtor',
+    'decree holder',
+    'other'
   ];
 
   const caseStageOptions = [
-    'FC Suit',
-    'Banking Suit',
-    'Criminal Case',
-    'Criminal Bail Application',
-    'Revision Application',
-    'Civil Appeal',
-    'Criminal Appeal',
-    'Family Suit',
-    'Guardian Case',
-    'Summary Suit',
-    'Session Case',
-    'Direct Complain',
-    'Petition',
-    'Banking Execution',
-    'Other'
+    'notice',
+    'adv to be heard',
+    'appearance of defendant',
+    'repeat notice',
+    'publication',
+    'written statement',
+    'hearing',
+    'objection',
+    'evidence',
+    'framing of charge',
+    'arguments',
+    'statement of accused',
+    'trail',
+    'order',
+    'judgement',
+    'other'
   ];
+
+  const caseTypeOptions = [
+    'FC suit',
+    'Banking suit',
+    'criminal case',
+    'criminal bail application',
+    'Revision application',
+    'civil appeal',
+    'criminal appeal',
+    'family suit',
+    'guardian case',
+    'summary suit',
+    'session case',
+    'direct complain',
+    'petition',
+    'banking execution',
+    'other'
+  ];
+
+  // Common court options for autocomplete
+ const courtOptions = [
+  "Supreme Court of Pakistan",
+  "Federal Shariat Court",
+  "Lahore High Court – Principal Seat (Lahore)",
+  "Lahore High Court – Multan Bench",
+  "High Court of Sindh (Karachi)",
+  "High Court of Peshawar",
+  "High Court of Balochistan (Quetta)",
+  "Islamabad High Court",
+  "District Court – Lahore",
+  "District Court – Karachi",
+  "District Court – Islamabad",
+  "District Court – Rawalpindi",
+  "District Court – Faisalabad",
+  "District Court – Multan",
+  "Family Court – Lahore",
+  "Family Court – Karachi",
+  "Labour Court – Lahore",
+  "Consumer Court – Lahore",
+  "Anti-Terrorism Court – Lahore",
+  "Anti-Corruption Court – Lahore",
+  "Banking Court – Karachi",
+  "Customs, Taxation & Anti-Smuggling Court – Karachi",
+  "Accountability Court (NAB Court) – Islamabad",
+  "Accountability Court – Multan",
+  "Multan Banking Court-I",
+  "Services Tribunal – Punjab",
+  "Environmental Protection Tribunal – Lahore",
+  "Environmental Protection Tribunal – Karachi",
+  "Other"
+];
+
 
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
@@ -78,6 +131,8 @@ export default function CaseForm() {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [courtSearch, setCourtSearch] = useState('');
+  const [showCourtDropdown, setShowCourtDropdown] = useState(false);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -118,6 +173,25 @@ export default function CaseForm() {
     setClientSearch(client.name);
   };
 
+  const handleCourtInput = (e) => {
+    const value = e.target.value;
+    setCourtSearch(value);
+    setFormData(prev => ({ ...prev, court: value }));
+    setShowCourtDropdown(value.length > 0);
+  };
+
+  const selectCourt = (court) => {
+    setFormData(prev => ({ ...prev, court }));
+    setCourtSearch(court);
+    setShowCourtDropdown(false);
+  };
+
+  const clearCourt = () => {
+    setFormData(prev => ({ ...prev, court: '' }));
+    setCourtSearch('');
+    setShowCourtDropdown(false);
+  };
+
   const validateForm = () => {
     const required = [
       'caseNumber', 
@@ -130,7 +204,9 @@ export default function CaseForm() {
       'caseDescription',
       'onBehalfOf',
       'caseStage',
-      'clientId'
+      'clientId',
+      'caseType',
+      'court'
     ];
     
     return required.every(field => {
@@ -164,7 +240,9 @@ export default function CaseForm() {
         progress: parseInt(formData.progress) || 0,
         caseValue: formData.caseValue,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        caseType: formData.caseType,
+        court: formData.court
       };
       
       if (db) {
@@ -190,9 +268,12 @@ export default function CaseForm() {
           caseStage: '',
           clientId: '',
           progress: 0,
-          caseValue: ''
+          caseValue: '',
+          caseType: '',
+          court: ''
         });
         setClientSearch('');
+        setCourtSearch('');
         setSubmitMessage('');
       }, 3000);
       
@@ -207,6 +288,10 @@ export default function CaseForm() {
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
     (client.email && client.email.toLowerCase().includes(clientSearch.toLowerCase()))
+  );
+
+  const filteredCourts = courtOptions.filter(court => 
+    court.toLowerCase().includes(courtSearch.toLowerCase())
   );
 
   const containerVariants = {
@@ -323,6 +408,72 @@ export default function CaseForm() {
                 </select>
               </div>
               
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Case Type *
+                </label>
+                <select
+                  name="caseType"
+                  value={formData.caseType}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  required
+                >
+                  <option value="">Select an option</option>
+                  {caseTypeOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="relative">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Court *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={courtSearch}
+                    onChange={handleCourtInput}
+                    onFocus={() => setShowCourtDropdown(courtSearch.length > 0)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all pr-10"
+                    placeholder="Type or select court"
+                    required
+                  />
+                  {courtSearch && (
+                    <button
+                      type="button"
+                      onClick={clearCourt}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <FiX />
+                    </button>
+                  )}
+                </div>
+                
+                {showCourtDropdown && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                  >
+                    {filteredCourts.length === 0 ? (
+                      <div className="p-4 text-slate-500">No courts found</div>
+                    ) : (
+                      filteredCourts.map(court => (
+                        <div
+                          key={court}
+                          className="p-3 cursor-pointer hover:bg-slate-50"
+                          onClick={() => selectCourt(court)}
+                        >
+                          <div className="font-medium text-slate-800">{court}</div>
+                        </div>
+                      ))
+                    )}
+                  </motion.div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Party Name *
@@ -575,13 +726,13 @@ export default function CaseForm() {
                 </>
               )}
             </motion.button>
-               <motion.button
-            onClick={() => navigate(-1)}
-            className="px-12 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center mx-auto crsor-pointer hover:text-slate-800 mb-4 transition-colors mx-auto md:mx-0"
-          >
-            <FiChevronLeft className="mr-1" />
-            Go Back
-          </motion.button>
+            <motion.button
+              onClick={() => navigate(-1)}
+              className="mt-4 px-8 py-3 bg-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-300 transition-all duration-200 flex items-center justify-center mx-auto cursor-pointer"
+            >
+              <FiChevronLeft className="mr-1" />
+              Go Back
+            </motion.button>
           </motion.div>
         </div>
       </motion.div>

@@ -573,143 +573,149 @@ export default function ManageClients() {
               <button onClick={() => setShowModal(false)}><FiX /></button>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="flex gap-4 border-b pb-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value="individual"
-                    {...register("clientType")}
-                    className="form-radio text-blue-500"
-                  />
-                  <span className="flex items-center gap-1">
-                    <FiUser /> Individual
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value="corporate"
-                    {...register("clientType")}
-                    className="form-radio text-indigo-500"
-                  />
-                  <span className="flex items-center gap-1">
-                    <FiBriefcase /> Corporate
-                  </span>
-                </label>
-              </div>
+           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+  <div className="flex gap-4 border-b pb-3">
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="radio"
+        value="individual"
+        {...register("clientType")}
+        className="form-radio text-blue-500"
+      />
+      <span className="flex items-center gap-1">
+        <FiUser /> Individual
+      </span>
+    </label>
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="radio"
+        value="corporate"
+        {...register("clientType")}
+        className="form-radio text-indigo-500"
+      />
+      <span className="flex items-center gap-1">
+        <FiBriefcase /> Corporate
+      </span>
+    </label>
+  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {clientType === "corporate" ? (
-                  <>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Company Name *</label>
-                      <input
-                        {...register("companyName", { required: "Company name required" })}
-                        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                      />
-                      {errors.companyName && <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>}
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Authorized Persons</label>
-                      <input
-                        {...register("authorizedPersons")}
-                        placeholder="Comma separated names"
-                        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">List of people authorized to represent the company</p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name *</label>
-                    <input
-                      {...register("name", { required: "Name required" })}
-                      className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                    />
-                    {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
-                  </div>
-                )}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {clientType === "corporate" ? (
+      <>
+        {/* Company Name (Required) */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Company Name *
+          </label>
+          <input
+            {...register("companyName", { required: "Company name is required" })}
+            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+          {errors.companyName && <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>}
+        </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {clientType === "corporate" ? "Registration Number" : "CNIC *"}
-                  </label>
-                  <input
-                    {...register("cnic", { 
-                      required: clientType === "individual" ? "CNIC required" : false,
-                      pattern: {
-                        value: /^[0-9]{5}-[0-9]{7}-[0-9]{1}$/,
-                        message: "Format: XXXXX-XXXXXXX-X"
-                      }
-                    })}
-                    placeholder={clientType === "corporate" ? "Registration ID" : "XXXXX-XXXXXXX-X"}
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                  {errors.cnic && <p className="text-xs text-red-500 mt-1">{errors.cnic.message}</p>}
-                </div>
+        {/* Authorized Persons (Optional) */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Authorized Persons
+          </label>
+          <input
+            {...register("authorizedPersons")}
+            placeholder="Comma separated names"
+            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+        </div>
+      </>
+    ) : (
+      <>
+        {/* Full Name (Required) */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Full Name *
+          </label>
+          <input
+            {...register("name", { required: "Name is required" })}
+            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+          {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+        </div>
+      </>
+    )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {clientType === "corporate" ? "Establishment Date" : "Date of Birth"}
-                  </label>
-                  <input
-                    type="date"
-                    {...register("dob")}
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                </div>
+    {/* Contact (Required) */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Contact Number *
+      </label>
+      <input
+        {...register("contact", { required: "Contact number is required" })}
+        placeholder="03XXXXXXXXX"
+        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      />
+      {errors.contact && <p className="text-xs text-red-500 mt-1">{errors.contact.message}</p>}
+    </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
-                  <input
-                    {...register("location")}
-                    placeholder="City, Country"
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                </div>
+    {/* Location (Required) */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Location *
+      </label>
+      <input
+        {...register("location", { required: "Location is required" })}
+        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      />
+      {errors.location && <p className="text-xs text-red-500 mt-1">{errors.location.message}</p>}
+    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact *</label>
-                  <input
-                    {...register("contact", { required: "Contact required" })}
-                    placeholder="Phone number"
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                  {errors.contact && <p className="text-xs text-red-500 mt-1">{errors.contact.message}</p>}
-                </div>
+    {/* CNIC (Optional) */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        CNIC
+      </label>
+      <input
+        {...register("cnic")}
+        placeholder="XXXXX-XXXXXXX-X"
+        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      />
+    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                  <input
-                    {...register("email", { 
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: "Invalid email address"
-                      }
-                    })}
-                    placeholder="email@example.com"
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                  {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
-                </div>
+    {/* Email (Optional) */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Email
+      </label>
+      <input
+        type="email"
+        {...register("email")}
+        placeholder="example@email.com"
+        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      />
+    </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
-                  <textarea
-                    {...register("notes")}
-                    rows={3}
-                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-                  />
-                </div>
-              </div>
+    {/* Notes (Optional) */}
+    <div className="md:col-span-2">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Notes
+      </label>
+      <textarea
+        {...register("notes")}
+        rows={3}
+        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+      />
+    </div>
+  </div>
 
-              <div className="flex items-center justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 rounded-md border">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-4 py-2 rounded-md bg-blue-600 text-white">{editingClient ? "Save changes" : "Create client"}</button>
-              </div>
-            </form>
+  <div className="flex justify-end">
+    <button
+      type="submit"
+      disabled={isSubmitting}
+      className="px-4 py-2 rounded-lg bg-blue-600 text-white"
+    >
+      {editingClient ? "Update Client" : "Save Client"}
+    </button>
+  </div>
+</form>
+
           </motion.div>
         </div>
       )}

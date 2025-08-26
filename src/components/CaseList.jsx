@@ -457,6 +457,11 @@ const adjournCase = async (caseId, newDate, reason) => {
                             {caseItem.status || 'Unknown'}
                           </span>
                         </div>
+                        <div>
+  <p className="text-sm text-gray-500">Case Type</p>
+  <p className="font-medium">{caseItem.caseType || '—'}</p>
+</div>
+
                         <p className="text-gray-600 flex items-center mb-1">
                           <User className="w-4 h-4 mr-2" />
                           {caseItem.partyName ? `${caseItem.partyName} (${caseItem.onBehalfOf})` : '—'}
