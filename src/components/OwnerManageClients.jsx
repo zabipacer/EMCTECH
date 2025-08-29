@@ -17,16 +17,13 @@ import {
 } from "react-icons/fi";
 
 /* ------------------- Firebase v9 modular ------------------- */
-import { initializeApp, getApps } from "firebase/app";
 import {
-  getFirestore,
   collection,
   query,
   orderBy,
   limit,
   startAfter,
   onSnapshot,
-  where,
   doc,
   addDoc,
   updateDoc,
@@ -105,19 +102,14 @@ export default function ManageClients() {
 
   const isOwner = true;
 
-  // Form setup with new fields
+  // Form setup - only name/companyName, contact and location now
   const { register, handleSubmit, reset, formState: { errors, isSubmitting }, setValue, watch } = useForm({
     defaultValues: {
       clientType: "individual",
       name: "",
       companyName: "",
-      authorizedPersons: "",
-      location: "",
-      cnic: "",
-      dob: "",
       contact: "",
-      email: "",
-      notes: "",
+      location: "",
     }
   });
 
@@ -154,7 +146,7 @@ export default function ManageClients() {
     }
   }, []);
 
-  // Filtered clients
+  // Filtered clients (search only name/companyName/contact/location)
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
     return clients
@@ -165,22 +157,20 @@ export default function ManageClients() {
           if (!tags.map(t=>t.toLowerCase()).includes(tagFilter.toLowerCase())) return false;
         }
         if (!q) return true;
-        
-        // Search both individual and corporate fields
+
+        const nameField = c.clientType === "corporate" ? (c.companyName || "") : (c.name || "");
         const searchFields = [
-          c.clientType === "corporate" ? c.companyName : c.name,
-          c.email,
-          c.contact,
-          c.cnic,
-          ...(c.authorizedPersons || [])
-        ].filter(Boolean).map(f => f.toLowerCase());
-        
+          (nameField || ""),
+          (c.contact || ""),
+          (c.location || "")
+        ].map(f => String(f).toLowerCase());
+
         return searchFields.some(field => field.includes(q));
       })
       .sort((a, b) => {
         if (sortBy === "name") {
-          const nameA = a.clientType === "corporate" ? a.companyName : a.name;
-          const nameB = b.clientType === "corporate" ? b.companyName : b.name;
+          const nameA = a.clientType === "corporate" ? (a.companyName || "") : (a.name || "");
+          const nameB = b.clientType === "corporate" ? (b.companyName || "") : (b.name || "");
           return orderDir === "asc" ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
         }
         const ta = a[sortBy] && typeof a[sortBy].toDate === "function" ? a[sortBy].toDate().getTime() : a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
@@ -211,13 +201,8 @@ export default function ManageClients() {
       clientType: "individual",
       name: "",
       companyName: "",
-      authorizedPersons: "",
-      location: "",
-      cnic: "",
-      dob: "",
       contact: "",
-      email: "",
-      notes: "",
+      location: "",
     });
     setShowModal(true);
   }
@@ -227,31 +212,33 @@ export default function ManageClients() {
     setValue("clientType", client.clientType || "individual");
     setValue("name", client.name || "");
     setValue("companyName", client.companyName || "");
-    setValue("authorizedPersons", Array.isArray(client.authorizedPersons) ? client.authorizedPersons.join(", ") : client.authorizedPersons || "");
-    setValue("location", client.location || "");
-    setValue("cnic", client.cnic || "");
-    setValue("dob", client.dob ? (client.dob.toDate ? client.dob.toDate().toISOString().slice(0, 10) : client.dob) : "");
     setValue("contact", client.contact || "");
-    setValue("email", client.email || "");
-    setValue("notes", client.notes || "");
+    setValue("location", client.location || "");
     setShowModal(true);
   }
 
   async function onSubmit(data) {
     try {
+      // minimal payload: clientType, name/companyName, contact, location
       const payload = {
-        ...data,
-        tags: data.tags ? data.tags.split(",").map((t) => t.trim()) : [],
-        authorizedPersons: data.authorizedPersons 
-          ? data.authorizedPersons.split(",").map(p => p.trim()).filter(p => p !== "")
-          : [],
+        clientType: data.clientType || "individual",
+        contact: data.contact || "",
+        location: data.location || "",
         updatedAt: serverTimestamp(),
       };
 
+      if (payload.clientType === "corporate") {
+        payload.companyName = (data.companyName || "").trim();
+        payload.name = ""; // keep name empty for corporate
+      } else {
+        payload.name = (data.name || "").trim();
+        payload.companyName = "";
+      }
+
       if (editingClient) {
+        // optimistic UI update
         setClients((prev) => prev.map((c) => (c.id === editingClient.id ? { ...c, ...payload } : c)));
-        const docRef = doc(db, "clients", editingClient.id);
-        await updateDoc(docRef, payload);
+        await updateDoc(doc(db, "clients", editingClient.id), payload);
       } else {
         payload.createdAt = serverTimestamp();
         payload.lastActivity = serverTimestamp();
@@ -301,10 +288,8 @@ export default function ManageClients() {
       id: c.id,
       type: c.clientType === "corporate" ? "Corporate" : "Individual",
       name: c.clientType === "corporate" ? c.companyName : c.name,
-      email: c.email,
       contact: c.contact,
       location: c.location,
-      cnic: c.cnic,
       createdAt: fmt(c.createdAt),
     }));
     exportCSV("clients_export.csv", rows);
@@ -334,11 +319,11 @@ export default function ManageClients() {
     setClientCases([]);
     setClientActivity([]);
 
-    // Fetch cases assigned to this client - FIXED FIELD NAME
+    // Fetch cases assigned to this client
     try {
       const q = query(
         collection(db, "cases"), 
-        where("clientId", "==", client.id), // Changed from "clientId" to "clientID"
+        where("clientId", "==", client.id),
         orderBy("createdAt", "desc"), 
         limit(50)
       );
@@ -373,7 +358,7 @@ export default function ManageClients() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Clients</h1>
           <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
-            Manage corporate and individual clients with detailed profiles
+            Manage clients — add only name, contact and location
           </p>
         </div>
 
@@ -458,7 +443,6 @@ export default function ManageClients() {
                   <th className="py-3">Client</th>
                   <th className="py-3">Type</th>
                   <th className="py-3">Contact</th>
-                  <th className="py-3">Email</th>
                   <th className="py-3">Location</th>
                   <th className="py-3">Created</th>
                   <th className="py-3 text-right">Actions</th>
@@ -477,11 +461,8 @@ export default function ManageClients() {
                         </div>
                         <div>
                           <div className="font-medium text-gray-800 dark:text-gray-100">
-                            {isCorporate ? c.companyName : c.name}
+                            {isCorporate ? (c.companyName || "—") : (c.name || "—")}
                           </div>
-                          {isCorporate && c.authorizedPersons?.length > 0 && (
-                            <div className="text-xs text-gray-400">{c.authorizedPersons[0]}</div>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -493,7 +474,6 @@ export default function ManageClients() {
                     <td className="py-3">
                       <div className="text-sm text-gray-600 dark:text-gray-200">{c.contact || "—"}</div>
                     </td>
-                    <td className="py-3"><div className="text-sm text-gray-600 dark:text-gray-200">{c.email || "—"}</div></td>
                     <td className="py-3">
                       <div className="text-sm text-gray-600 dark:text-gray-200">{c.location || "—"}</div>
                     </td>
@@ -524,7 +504,7 @@ export default function ManageClients() {
                     </div>
                     <div>
                       <div className="font-medium text-gray-800 dark:text-gray-100">
-                        {isCorporate ? c.companyName : c.name}
+                        {isCorporate ? (c.companyName || "—") : (c.name || "—")}
                       </div>
                       <div className="text-xs text-gray-400">
                         <span className={`px-1 py-0.5 rounded ${isCorporate ? "bg-indigo-100 text-indigo-800" : "bg-blue-100 text-blue-800"}`}>
@@ -542,8 +522,6 @@ export default function ManageClients() {
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                   <div className="text-gray-600 dark:text-gray-300">Contact</div>
                   <div>{c.contact || "—"}</div>
-                  <div className="text-gray-600 dark:text-gray-300">Email</div>
-                  <div>{c.email || "—"}</div>
                   <div className="text-gray-600 dark:text-gray-300">Location</div>
                   <div>{c.location || "—"}</div>
                 </div>
@@ -573,149 +551,98 @@ export default function ManageClients() {
               <button onClick={() => setShowModal(false)}><FiX /></button>
             </div>
 
-           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-  <div className="flex gap-4 border-b pb-3">
-    <label className="flex items-center gap-2 cursor-pointer">
-      <input
-        type="radio"
-        value="individual"
-        {...register("clientType")}
-        className="form-radio text-blue-500"
-      />
-      <span className="flex items-center gap-1">
-        <FiUser /> Individual
-      </span>
-    </label>
-    <label className="flex items-center gap-2 cursor-pointer">
-      <input
-        type="radio"
-        value="corporate"
-        {...register("clientType")}
-        className="form-radio text-indigo-500"
-      />
-      <span className="flex items-center gap-1">
-        <FiBriefcase /> Corporate
-      </span>
-    </label>
-  </div>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <div className="flex gap-4 border-b pb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="individual"
+                    {...register("clientType")}
+                    className="form-radio text-blue-500"
+                  />
+                  <span className="flex items-center gap-1">
+                    <FiUser /> Individual
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="corporate"
+                    {...register("clientType")}
+                    className="form-radio text-indigo-500"
+                  />
+                  <span className="flex items-center gap-1">
+                    <FiBriefcase /> Corporate
+                  </span>
+                </label>
+              </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    {clientType === "corporate" ? (
-      <>
-        {/* Company Name (Required) */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Company Name *
-          </label>
-          <input
-            {...register("companyName", { required: "Company name is required" })}
-            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-          {errors.companyName && <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>}
-        </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {clientType === "corporate" ? (
+                  <>
+                    {/* Company Name (Required) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Company Name *
+                      </label>
+                      <input
+                        {...register("companyName", { required: "Company name is required" })}
+                        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                      />
+                      {errors.companyName && <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Full Name (Required) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Full Name *
+                      </label>
+                      <input
+                        {...register("name", { required: "Name is required" })}
+                        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                      />
+                      {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+                    </div>
+                  </>
+                )}
 
-        {/* Authorized Persons (Optional) */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Authorized Persons
-          </label>
-          <input
-            {...register("authorizedPersons")}
-            placeholder="Comma separated names"
-            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-        </div>
-      </>
-    ) : (
-      <>
-        {/* Full Name (Required) */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Full Name *
-          </label>
-          <input
-            {...register("name", { required: "Name is required" })}
-            className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-          {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
-        </div>
-      </>
-    )}
+                {/* Contact (Required) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Contact Number *
+                  </label>
+                  <input
+                    {...register("contact", { required: "Contact number is required" })}
+                    placeholder="03XXXXXXXXX"
+                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                  />
+                  {errors.contact && <p className="text-xs text-red-500 mt-1">{errors.contact.message}</p>}
+                </div>
 
-    {/* Contact (Required) */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Contact Number *
-      </label>
-      <input
-        {...register("contact", { required: "Contact number is required" })}
-        placeholder="03XXXXXXXXX"
-        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-      />
-      {errors.contact && <p className="text-xs text-red-500 mt-1">{errors.contact.message}</p>}
-    </div>
+                {/* Location (Optional) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Location
+                  </label>
+                  <input
+                    {...register("location")}
+                    className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                  />
+                </div>
+              </div>
 
-    {/* Location (Required) */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Location *
-      </label>
-      <input
-        {...register("location", { required: "Location is required" })}
-        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-      />
-      {errors.location && <p className="text-xs text-red-500 mt-1">{errors.location.message}</p>}
-    </div>
-
-    {/* CNIC (Optional) */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        CNIC
-      </label>
-      <input
-        {...register("cnic")}
-        placeholder="XXXXX-XXXXXXX-X"
-        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-      />
-    </div>
-
-    {/* Email (Optional) */}
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Email
-      </label>
-      <input
-        type="email"
-        {...register("email")}
-        placeholder="example@email.com"
-        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-      />
-    </div>
-
-    {/* Notes (Optional) */}
-    <div className="md:col-span-2">
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        Notes
-      </label>
-      <textarea
-        {...register("notes")}
-        rows={3}
-        className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
-      />
-    </div>
-  </div>
-
-  <div className="flex justify-end">
-    <button
-      type="submit"
-      disabled={isSubmitting}
-      className="px-4 py-2 rounded-lg bg-blue-600 text-white"
-    >
-      {editingClient ? "Update Client" : "Save Client"}
-    </button>
-  </div>
-</form>
-
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white"
+                >
+                  {editingClient ? "Update Client" : "Save Client"}
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}
@@ -734,8 +661,8 @@ export default function ManageClients() {
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white">
                       {activeClient.clientType === "corporate" 
-                        ? activeClient.companyName 
-                        : activeClient.name}
+                        ? (activeClient.companyName || "—") 
+                        : (activeClient.name || "—")}
                     </h3>
                     <div className="text-xs text-gray-500 dark:text-gray-300">
                       <span className={`px-2 py-1 rounded-full ${activeClient.clientType === "corporate" ? "bg-indigo-100 text-indigo-800" : "bg-blue-100 text-blue-800"}`}>
@@ -763,41 +690,9 @@ export default function ManageClients() {
                     <div className="font-medium">{activeClient.contact || "—"}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500 dark:text-gray-400">Email</div>
-                    <div className="font-medium">{activeClient.email || "—"}</div>
-                  </div>
-                  <div>
                     <div className="text-gray-500 dark:text-gray-400">Location</div>
                     <div className="font-medium">{activeClient.location || "—"}</div>
                   </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400">
-                      {activeClient.clientType === "corporate" ? "Reg. Number" : "CNIC"}
-                    </div>
-                    <div className="font-medium">{activeClient.cnic || "—"}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400">
-                      {activeClient.clientType === "corporate" ? "Est. Date" : "Date of Birth"}
-                    </div>
-                    <div className="font-medium">{fmt(activeClient.dob) || "—"}</div>
-                  </div>
-                  {activeClient.clientType === "corporate" && activeClient.authorizedPersons?.length > 0 && (
-                    <div className="md:col-span-2">
-                      <div className="text-gray-500 dark:text-gray-400">Authorized Persons</div>
-                      <div className="font-medium">
-                        {Array.isArray(activeClient.authorizedPersons) 
-                          ? activeClient.authorizedPersons.join(", ") 
-                          : activeClient.authorizedPersons}
-                      </div>
-                    </div>
-                  )}
-                  {activeClient.notes && (
-                    <div className="md:col-span-2">
-                      <div className="text-gray-500 dark:text-gray-400">Notes</div>
-                      <div className="font-medium">{activeClient.notes}</div>
-                    </div>
-                  )}
                 </div>
               </div>
 

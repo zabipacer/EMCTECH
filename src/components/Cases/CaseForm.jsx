@@ -4,14 +4,13 @@ import {
   FiUser, 
   FiFileText, 
   FiCalendar,
-  FiMapPin,
   FiSave,
   FiAlertCircle,
   FiChevronDown,
   FiSearch,
-  FiDollarSign,
   FiChevronLeft,
-  FiX
+  FiX,
+  FiGitlab
 } from 'react-icons/fi';
 import { db } from '../../firebase/firebase';
 import { addDoc, collection, getDocs } from 'firebase/firestore';
@@ -23,24 +22,23 @@ export default function CaseForm() {
     caseNumber: '',
     caseTitle: '',
     partyName: '',
-    complainantName: '',
-    location: '',
+    // complainantName removed
+    // location removed
     adjournDate: '',
     hearingDate: '',
     underSection: '',
     caseDescription: '',
     onBehalfOf: '',
     caseStage: '',
-    clientId: '',
+    clientId: '', // optional now
     progress: 0,
-    caseValue: '',
+    // caseValue removed
     caseType: '',
     court: ''
   });
 
   const onBehalfOfOptions = [
     'plaintiff',
-    'complainant',
     'respondent',
     'opponent',
     'applicant',
@@ -124,7 +122,6 @@ export default function CaseForm() {
   "Other"
 ];
 
-
   const [clients, setClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [clientSearch, setClientSearch] = useState('');
@@ -192,19 +189,20 @@ export default function CaseForm() {
     setShowCourtDropdown(false);
   };
 
+  // Validation adjusted: make clientId and caseDescription optional, removed complainantName & location & caseValue
   const validateForm = () => {
     const required = [
       'caseNumber', 
       'caseTitle', 
       'partyName', 
-      'complainantName', 
+      // 'complainantName' removed
       'adjournDate', 
       'hearingDate', 
       'underSection', 
-      'caseDescription',
+      // 'caseDescription' optional now
       'onBehalfOf',
       'caseStage',
-      'clientId',
+      // 'clientId' optional now
       'caseType',
       'court'
     ];
@@ -228,17 +226,17 @@ export default function CaseForm() {
         caseNumber: formData.caseNumber,
         caseTitle: formData.caseTitle,
         partyName: formData.partyName,
-        complainantName: formData.complainantName,
-        location: formData.location,
+        // complainantName removed
+        // location removed
         adjournDate: formData.adjournDate,
         hearingDate: formData.hearingDate,
         underSection: formData.underSection,
-        caseDescription: formData.caseDescription,
+        caseDescription: formData.caseDescription || '', // optional
         onBehalfOf: formData.onBehalfOf,
         caseStage: formData.caseStage,
-        clientId: formData.clientId,
+        clientId: formData.clientId || null, // optional
         progress: parseInt(formData.progress) || 0,
-        caseValue: formData.caseValue,
+        // caseValue removed
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         caseType: formData.caseType,
@@ -258,8 +256,6 @@ export default function CaseForm() {
           caseNumber: '',
           caseTitle: '',
           partyName: '',
-          complainantName: '',
-          location: '',
           adjournDate: '',
           hearingDate: '',
           underSection: '',
@@ -268,7 +264,6 @@ export default function CaseForm() {
           caseStage: '',
           clientId: '',
           progress: 0,
-          caseValue: '',
           caseType: '',
           court: ''
         });
@@ -286,7 +281,7 @@ export default function CaseForm() {
   };
 
   const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+    (client.name || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
     (client.email && client.email.toLowerCase().includes(clientSearch.toLowerCase()))
   );
 
@@ -427,8 +422,8 @@ export default function CaseForm() {
               </div>
               
               <div className="relative">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Court *
+                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <FiGitlab /> Court *
                 </label>
                 <div className="relative">
                   <input
@@ -488,22 +483,9 @@ export default function CaseForm() {
                   required
                 />
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Complainant Name *
-                </label>
-                <input
-                  type="text"
-                  name="complainantName"
-                  value={formData.complainantName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter complainant name"
-                  required
-                />
-              </div>
-              
+
+              {/* complainantName removed */}
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   <FiCalendar className="inline mr-1" />
@@ -548,22 +530,9 @@ export default function CaseForm() {
                   required
                 />
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  <FiMapPin className="inline mr-1" />
-                  Location
-                </label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter location"
-                />
-              </div>
-              
+
+              {/* Location removed */}
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Case Progress (%)
@@ -581,33 +550,20 @@ export default function CaseForm() {
                   {formData.progress}%
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  <FiDollarSign className="inline mr-1" />
-                  Case Value
-                </label>
-                <input
-                  type="text"
-                  name="caseValue"
-                  value={formData.caseValue}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="e.g., $15,000"
-                />
-              </div>
+
+              {/* Case Value removed */}
             </div>
           </motion.div>
 
           <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center">
               <FiUser className="mr-3 text-green-600" />
-              Select Client
+              Select Client (optional)
             </h2>
             
             <div className="relative">
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Client *
+                Client
               </label>
               
               <div className="relative">
@@ -674,12 +630,12 @@ export default function CaseForm() {
           <motion.div variants={itemVariants} className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center">
               <FiFileText className="mr-3 text-purple-600" />
-              Case Description
+              Case Description (optional)
             </h2>
             
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Case Description *
+                Case Description
               </label>
               <textarea
                 name="caseDescription"
@@ -688,7 +644,6 @@ export default function CaseForm() {
                 rows="4"
                 className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 placeholder="Enter detailed case description..."
-                required
               />
             </div>
           </motion.div>

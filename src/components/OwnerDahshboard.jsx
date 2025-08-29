@@ -355,6 +355,15 @@ export default function Profile() {
           >
             + New Client
           </Link>
+           <Link
+          to={"/add-court"}
+            className="px-4 py-2 cursor-pointer rounded-lg bg-gradient-to-r from-blue-500 to-blue-400 text-white text-sm shadow hover:brightness-95 transition"
+            aria-label="Create new case"
+          >
+            + Add court
+          </Link>
+
+
             
 
     
