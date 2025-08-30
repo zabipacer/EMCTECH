@@ -1,4 +1,3 @@
-// CaseList.jsx — fixed PDF generation (ensures every case gets its own page)
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -486,6 +485,19 @@ const generatePdfBlob = async (casesArray) => {
         <div className="space-y-5">
           {cases.map(caseItem => (
             <div key={caseItem.id} className={`bg-white rounded-2xl shadow-md overflow-hidden border transition-all duration-200 ${expandedCase === caseItem.id ? 'border-blue-300 shadow-lg' : 'border-gray-100 hover:border-blue-200 hover:shadow-lg'}`}>
+              {/* Court Header - Added prominently at the top */}
+              <div className="bg-blue-50 px-5 py-3 border-b border-blue-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Gavel className="w-5 h-5 text-blue-700 mr-2" />
+                    <span className="font-bold text-blue-800 text-lg">{renderCourt(caseItem)}</span>
+                  </div>
+                  <div className="text-sm text-blue-600 font-medium">
+                    {caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
+                  </div>
+                </div>
+              </div>
+              
               <div className="p-5 cursor-pointer" onClick={() => toggleExpand(caseItem.id)}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex-1">
@@ -494,13 +506,11 @@ const generatePdfBlob = async (casesArray) => {
                       <div className="flex-1">
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{caseItem.caseTitle || 'Untitled Case'}</h3>
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 flex items-center gap-2"><Gavel className="w-3 h-3" /><span className="font-medium">{renderCourt(caseItem)}</span></div>
                           <span className="text-sm text-gray-600">Case #: {caseItem.caseNumber || `#${caseItem.id?.slice(-6) || 'Unknown'}`}</span>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(caseItem.priority)}`}>{caseItem.priority || 'Standard'}</span>
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(caseItem.status)}`}>{caseItem.status || 'Unknown'}</span>
                         </div>
                         <p className="text-gray-600 flex items-center mb-1"><User className="w-4 h-4 mr-2" />{caseItem.partyName ? `${caseItem.partyName} (${caseItem.onBehalfOf})` : '—'}</p>
-                        <p className="text-gray-600 flex items-center"><CalendarIcon className="w-4 h-4 mr-2" />{caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : '—'}</p>
                       </div>
                     </div>
                   </div>
@@ -536,7 +546,6 @@ const generatePdfBlob = async (casesArray) => {
                           <div><p className="text-sm text-gray-500">U/Sec or Nature of Suit</p><p className="font-medium">{caseItem.underSection || '—'}</p></div>
                           <div><p className="text-sm text-gray-500">Hearing Date</p><p className="font-medium">{caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : '—'}</p></div>
                           <div><p className="text-sm text-gray-500">Adjourn Date</p><p className="font-medium">{formatDate(caseItem.adjournDate) || '—'}</p></div>
-                          <div><p className="text-sm text-gray-500">Court</p><p className="font-medium">{renderCourt(caseItem)}</p></div>
                         </div>
                       </div>
                     </div>

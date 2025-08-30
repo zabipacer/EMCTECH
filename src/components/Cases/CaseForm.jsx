@@ -22,19 +22,16 @@ export default function CaseForm() {
     caseNumber: '',
     caseTitle: '',
     partyName: '',
-    // complainantName removed
-    // location removed
     adjournDate: '',
     hearingDate: '',
     underSection: '',
     caseDescription: '',
     onBehalfOf: '',
     caseStage: '',
-    clientId: '', // optional now
+    clientId: '',
     progress: 0,
-    // caseValue removed
     caseType: '',
-    court: ''
+    court: '' // This is the field being validated
   });
 
   const onBehalfOfOptions = [
@@ -128,8 +125,31 @@ export default function CaseForm() {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [courts, setCourts] = useState([]);
+  const [isLoadingCourts, setIsLoadingCourts] = useState(true);
   const [courtSearch, setCourtSearch] = useState('');
   const [showCourtDropdown, setShowCourtDropdown] = useState(false);
+
+  useEffect(() => {
+    const fetchCourts = async () => {
+      try {
+        if (db) {
+          const querySnapshot = await getDocs(collection(db, 'courts'));
+          const courtsData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setCourts(courtsData);
+        }
+      } catch (error) {
+        console.error('Error fetching courts:', error);
+      } finally {
+        setIsLoadingCourts(false);
+      }
+    };
+
+    fetchCourts();
+  }, []);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -178,8 +198,8 @@ export default function CaseForm() {
   };
 
   const selectCourt = (court) => {
-    setFormData(prev => ({ ...prev, court }));
-    setCourtSearch(court);
+    setFormData(prev => ({ ...prev, court: court.name }));
+    setCourtSearch(court.name);
     setShowCourtDropdown(false);
   };
 
@@ -189,22 +209,19 @@ export default function CaseForm() {
     setShowCourtDropdown(false);
   };
 
-  // Validation adjusted: make clientId and caseDescription optional, removed complainantName & location & caseValue
+  // Validation function
   const validateForm = () => {
     const required = [
       'caseNumber', 
       'caseTitle', 
       'partyName', 
-      // 'complainantName' removed
       'adjournDate', 
       'hearingDate', 
       'underSection', 
-      // 'caseDescription' optional now
       'onBehalfOf',
       'caseStage',
-      // 'clientId' optional now
       'caseType',
-      'court'
+      'court' // This is the field being checked
     ];
     
     return required.every(field => {
@@ -226,21 +243,18 @@ export default function CaseForm() {
         caseNumber: formData.caseNumber,
         caseTitle: formData.caseTitle,
         partyName: formData.partyName,
-        // complainantName removed
-        // location removed
         adjournDate: formData.adjournDate,
         hearingDate: formData.hearingDate,
         underSection: formData.underSection,
-        caseDescription: formData.caseDescription || '', // optional
+        caseDescription: formData.caseDescription || '',
         onBehalfOf: formData.onBehalfOf,
         caseStage: formData.caseStage,
-        clientId: formData.clientId || null, // optional
+        clientId: formData.clientId || null,
         progress: parseInt(formData.progress) || 0,
-        // caseValue removed
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         caseType: formData.caseType,
-        court: formData.court
+        court: formData.court // This is what gets saved
       };
       
       if (db) {
@@ -285,8 +299,8 @@ export default function CaseForm() {
     (client.email && client.email.toLowerCase().includes(clientSearch.toLowerCase()))
   );
 
-  const filteredCourts = courtOptions.filter(court => 
-    court.toLowerCase().includes(courtSearch.toLowerCase())
+  const filteredCourts = courts.filter(court => 
+    (court.name || '').toLowerCase().includes(courtSearch.toLowerCase())
   );
 
   const containerVariants = {
@@ -430,9 +444,9 @@ export default function CaseForm() {
                     type="text"
                     value={courtSearch}
                     onChange={handleCourtInput}
-                    onFocus={() => setShowCourtDropdown(courtSearch.length > 0)}
+                    onFocus={() => setShowCourtDropdown(true)}
                     className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all pr-10"
-                    placeholder="Type or select court"
+                    placeholder="Search courts..."
                     required
                   />
                   {courtSearch && (
@@ -445,23 +459,30 @@ export default function CaseForm() {
                     </button>
                   )}
                 </div>
-                
+
                 {showCourtDropdown && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
                   >
-                    {filteredCourts.length === 0 ? (
+                    {isLoadingCourts ? (
+                      <div className="p-4 text-center text-slate-500">Loading courts...</div>
+                    ) : filteredCourts.length === 0 ? (
                       <div className="p-4 text-slate-500">No courts found</div>
                     ) : (
                       filteredCourts.map(court => (
                         <div
-                          key={court}
-                          className="p-3 cursor-pointer hover:bg-slate-50"
+                          key={court.id}
+                          className={`p-3 cursor-pointer hover:bg-slate-50 ${
+                            formData.court === court.name ? 'bg-blue-50' : ''
+                          }`}
                           onClick={() => selectCourt(court)}
                         >
-                          <div className="font-medium text-slate-800">{court}</div>
+                          <div className="font-medium text-slate-800">{court.name}</div>
+                          {court.district && (
+                            <div className="text-sm text-slate-600">{court.district}</div>
+                          )}
                         </div>
                       ))
                     )}
@@ -483,8 +504,6 @@ export default function CaseForm() {
                   required
                 />
               </div>
-
-              {/* complainantName removed */}
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -531,8 +550,6 @@ export default function CaseForm() {
                 />
               </div>
 
-              {/* Location removed */}
-
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Case Progress (%)
@@ -550,8 +567,6 @@ export default function CaseForm() {
                   {formData.progress}%
                 </div>
               </div>
-
-              {/* Case Value removed */}
             </div>
           </motion.div>
 
