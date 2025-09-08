@@ -26,6 +26,7 @@ import autoTable from "jspdf-autotable";
 
 export default function AllCasesPage() {
   const [cases, setCases] = useState([]);
+  const [courts, setCourts] = useState({}); // Store courts by ID
   const [filteredCases, setFilteredCases] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -35,15 +36,62 @@ export default function AllCasesPage() {
   const [selectedCase, setSelectedCase] = useState(null);
   const [showCaseModal, setShowCaseModal] = useState(false);
 
-  // Fetch cases from Firebase
+  // Function to extract court name from case data
+  const getCourtName = (caseData) => {
+    // If court is embedded in case data
+    if (caseData.court) {
+      if (typeof caseData.court === 'string') return caseData.court;
+      if (typeof caseData.court === 'object') {
+        return caseData.court.name || caseData.court.courtName || caseData.court.title || 'No Court Assigned';
+      }
+    }
+    
+    // If court is referenced by ID
+    if (caseData.courtId && courts[caseData.courtId]) {
+      return courts[caseData.courtId].name || 'No Court Assigned';
+    }
+    
+    return 'No Court Assigned';
+  };
+
+  // Function to extract court district from case data
+  const getCourtDistrict = (caseData) => {
+    // If court is embedded in case data
+    if (caseData.court && typeof caseData.court === 'object') {
+      return caseData.court.district || caseData.court.city || 'N/A';
+    }
+    
+    // If court is referenced by ID
+    if (caseData.courtId && courts[caseData.courtId]) {
+      return courts[caseData.courtId].district || 'N/A';
+    }
+    
+    return 'N/A';
+  };
+
+  // Fetch cases and courts from Firebase
   useEffect(() => {
-    const fetchCases = async () => {
+    const fetchData = async () => {
       try {
+        setIsLoading(true);
+        
+        // Fetch courts first
+        const courtsSnapshot = await getDocs(collection(db, 'courts'));
+        const courtsData = {};
+        
+        courtsSnapshot.forEach((doc) => {
+          courtsData[doc.id] = doc.data();
+        });
+        
+        setCourts(courtsData);
+        
+        // Fetch cases
         const querySnapshot = await getDocs(collection(db, 'cases'));
         const casesData = [];
         
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          
           casesData.push({
             id: doc.id,
             caseNumber: data.caseNumber || 'N/A',
@@ -62,7 +110,11 @@ export default function AllCasesPage() {
             createdAt: data.createdAt || new Date().toISOString(),
             caseDescription: data.caseDescription || 'No description available',
             onBehalfOf: data.onBehalfOf || 'N/A',
-            clientId: data.clientId || 'N/A'
+            clientId: data.clientId || 'N/A',
+            courtId: data.courtId || null,
+            court: data.court || null,
+            courtName: getCourtName(data),
+            courtDistrict: getCourtDistrict(data)
           });
         });
         
@@ -70,12 +122,12 @@ export default function AllCasesPage() {
         setFilteredCases(casesData);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching cases:', error);
+        console.error('Error fetching data:', error);
         setIsLoading(false);
       }
     };
 
-    fetchCases();
+    fetchData();
   }, []);
 
   // Filter cases based on search term and status
@@ -90,7 +142,8 @@ export default function AllCasesPage() {
         caseItem.caseTitle.toLowerCase().includes(lowerSearchTerm) ||
         caseItem.partyName.toLowerCase().includes(lowerSearchTerm) ||
         caseItem.complainantName.toLowerCase().includes(lowerSearchTerm) ||
-        caseItem.caseStage.toLowerCase().includes(lowerSearchTerm)
+        caseItem.caseStage.toLowerCase().includes(lowerSearchTerm) ||
+        caseItem.courtName.toLowerCase().includes(lowerSearchTerm)
       );
     }
     
@@ -146,13 +199,14 @@ export default function AllCasesPage() {
     doc.setTextColor(100, 100, 100);
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
     
-    // Add table using autoTable plugin
+    // Add table using autoTable plugin with court information
     autoTable(doc, {
       startY: 30,
-      head: [['Case Number', 'Title', 'Parties', 'Stage', 'Status', 'Hearing Date']],
+      head: [['Case Number', 'Title', 'Court', 'Parties', 'Stage', 'Status', 'Hearing Date']],
       body: selectedCasesData.map(caseItem => [
         caseItem.caseNumber,
         caseItem.caseTitle,
+        caseItem.courtName,
         `${caseItem.partyName} vs ${caseItem.complainantName}`,
         caseItem.caseStage,
         caseItem.status.charAt(0).toUpperCase() + caseItem.status.slice(1),
@@ -235,7 +289,7 @@ export default function AllCasesPage() {
               <FiSearch className="absolute left-3 top-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search cases by number, title, party, or stage..."
+                placeholder="Search cases by number, title, party, court, or stage..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -320,6 +374,7 @@ export default function AllCasesPage() {
                       Case Details
                     </div>
                   </th>
+                  <th className="py-4 px-6 text-left">Court</th>
                   <th className="py-4 px-6 text-left">Stage</th>
                   <th className="py-4 px-6 text-left">Hearing Date</th>
                   <th className="py-4 px-6 text-left">Progress</th>
@@ -360,6 +415,9 @@ export default function AllCasesPage() {
                         </div>
                       </td>
                       <td className="py-4 px-6">
+                        <span className="text-slate-700 font-medium">{caseItem.courtName}</span>
+                      </td>
+                      <td className="py-4 px-6">
                         <span className="text-slate-700">{caseItem.caseStage}</span>
                       </td>
                       <td className="py-4 px-6">
@@ -398,7 +456,7 @@ export default function AllCasesPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="py-12 px-6 text-center">
+                    <td colSpan="7" className="py-12 px-6 text-center">
                       <FiFileText className="mx-auto text-slate-400 text-4xl mb-3" />
                       <p className="text-slate-600">No cases found matching your search criteria.</p>
                       {searchTerm && (
@@ -489,6 +547,14 @@ export default function AllCasesPage() {
                       <div>
                         <span className="text-sm font-medium text-slate-600">Case Title:</span>
                         <p className="text-slate-800">{selectedCase.caseTitle}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Court:</span>
+                        <p className="text-slate-800">{selectedCase.courtName}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-slate-600">Court District:</span>
+                        <p className="text-slate-800">{selectedCase.courtDistrict}</p>
                       </div>
                       <div>
                         <span className="text-sm font-medium text-slate-600">Case Stage:</span>
