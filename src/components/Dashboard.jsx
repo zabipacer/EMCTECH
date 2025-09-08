@@ -1,7 +1,7 @@
 // LegalCalendar.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Scale, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Scale, Filter, Clock } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase/firebase';
 import {
@@ -17,8 +17,7 @@ import {
 
 const LegalCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [casesInMonth, setCasesInMonth] = useState([]);
-  const [casesData, setCasesData] = useState({});
+  const [eventsData, setEventsData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCaseType, setSelectedCaseType] = useState('All');
@@ -39,17 +38,17 @@ const LegalCalendar = () => {
     if (docData.hearingDate) {
       const date = new Date(docData.hearingDate);
       if (!isNaN(date.getTime())) {
-        dates.push(date);
+        dates.push({date, type: 'hearing', caseData: docData});
       }
     }
     
     if (docData.caseDate) {
       if (typeof docData.caseDate === 'object' && typeof docData.caseDate.toDate === 'function') {
-        dates.push(docData.caseDate.toDate());
+        dates.push({date: docData.caseDate.toDate(), type: 'hearing', caseData: docData});
       } else {
         const date = new Date(docData.caseDate);
         if (!isNaN(date.getTime())) {
-          dates.push(date);
+          dates.push({date, type: 'hearing', caseData: docData});
         }
       }
     }
@@ -58,7 +57,7 @@ const LegalCalendar = () => {
       docData.hearingDates.forEach(dateStr => {
         const date = new Date(dateStr);
         if (!isNaN(date.getTime())) {
-          dates.push(date);
+          dates.push({date, type: 'hearing', caseData: docData});
         }
       });
     }
@@ -66,10 +65,33 @@ const LegalCalendar = () => {
     return dates;
   };
 
-  // Filter cases by type
-  const filterCasesByType = (cases) => {
-    if (selectedCaseType === 'All') return cases;
-    return cases.filter(case_ => case_.caseType === selectedCaseType);
+  // Helper function to parse adjournment history
+  const parseAdjournmentDates = (docData) => {
+    const dates = [];
+    
+    if (Array.isArray(docData.adjournHistory)) {
+      docData.adjournHistory.forEach(adjourn => {
+        if (adjourn.date) {
+          const date = new Date(adjourn.date);
+          if (!isNaN(date.getTime())) {
+            dates.push({
+              date, 
+              type: 'adjournment', 
+              caseData: docData,
+              reason: adjourn.reason
+            });
+          }
+        }
+      });
+    }
+    
+    return dates;
+  };
+
+  // Filter events by type
+  const filterEventsByType = (events) => {
+    if (selectedCaseType === 'All') return events;
+    return events.filter(event => event.caseData.caseType === selectedCaseType);
   };
 
   // Fetch user role on component mount
@@ -137,30 +159,33 @@ const LegalCalendar = () => {
         });
 
         setAvailableCaseTypes(Array.from(caseTypes));
-        const dayData = {};
-        const monthCases = [];
+        const dayEvents = {};
 
         allCases.forEach(caseDoc => {
+          // Parse hearing dates
           const hearingDates = parseHearingDate(caseDoc);
           
-          hearingDates.forEach(dateObj => {
-            if (!dateObj) return;
+          // Parse adjournment dates
+          const adjournmentDates = parseAdjournmentDates(caseDoc);
+          
+          // Combine all events
+          const allEvents = [...hearingDates, ...adjournmentDates];
+          
+          allEvents.forEach(event => {
+            if (!event.date) return;
             
-            if (dateObj.getFullYear() === currentDate.getFullYear() && 
-                dateObj.getMonth() === currentDate.getMonth()) {
+            if (event.date.getFullYear() === currentDate.getFullYear() && 
+                event.date.getMonth() === currentDate.getMonth()) {
               
-              const day = dateObj.getDate();
-              const caseWithDate = { ...caseDoc, hearingDate: dateObj };
+              const day = event.date.getDate();
               
-              if (!dayData[day]) dayData[day] = [];
-              dayData[day].push(caseWithDate);
-              monthCases.push(caseWithDate);
+              if (!dayEvents[day]) dayEvents[day] = [];
+              dayEvents[day].push(event);
             }
           });
         });
 
-        setCasesData(dayData);
-        setCasesInMonth(monthCases);
+        setEventsData(dayEvents);
         setLoading(false);
         
       } catch (err) {
@@ -208,9 +233,12 @@ const LegalCalendar = () => {
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayCases = casesData[day] || [];
-      const filteredCases = filterCasesByType(dayCases);
-      const count = filteredCases.length;
+      const dayEvents = eventsData[day] || [];
+      const filteredEvents = filterEventsByType(dayEvents);
+      
+      const hearings = filteredEvents.filter(e => e.type === 'hearing');
+      const adjournments = filteredEvents.filter(e => e.type === 'adjournment');
+      const totalEvents = filteredEvents.length;
       
       const isToday = (
         day === new Date().getDate() &&
@@ -232,16 +260,25 @@ const LegalCalendar = () => {
             {day}
           </div>
           
-          {count > 0 && (
-            <div className="flex-1 overflow-hidden space-y-0.5 md:space-y-1">
-              <div className="inline-flex items-center text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
-                <Scale className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
-                {count}
-              </div>
+          {totalEvents > 0 && (
+            <div className="flex-1 overflow-hidden space-y-1">
+              {hearings.length > 0 && (
+                <div className="inline-flex items-center text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                  <Scale className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
+                  {hearings.length} Hearing{hearings.length !== 1 ? 's' : ''}
+                </div>
+              )}
+              
+              {adjournments.length > 0 && (
+                <div className="inline-flex items-center text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                  <Clock className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
+                  {adjournments.length} Adjournment{adjournments.length !== 1 ? 's' : ''}
+                </div>
+              )}
               
               <div className="text-xs text-gray-600 leading-tight hidden md:block">
-                {filteredCases.slice(0, 2).map(c => c.caseType).join(', ')}
-                {filteredCases.length > 2 && '...'}
+                {filteredEvents.slice(0, 2).map(event => event.caseData.caseType).join(', ')}
+                {filteredEvents.length > 2 && '...'}
               </div>
             </div>
           )}
@@ -251,8 +288,12 @@ const LegalCalendar = () => {
     return cells;
   };
 
-  const getFilteredCasesCount = () => {
-    return filterCasesByType(casesInMonth).length;
+  const getFilteredEventsCount = () => {
+    let total = 0;
+    for (let day in eventsData) {
+      total += filterEventsByType(eventsData[day]).length;
+    }
+    return total;
   };
 
   return (
@@ -340,10 +381,10 @@ const LegalCalendar = () => {
             
             <div className="bg-white rounded-lg shadow-sm px-4 py-3 border border-gray-100 w-full sm:w-auto">
               <div className="text-xs sm:text-sm text-gray-600">
-                {selectedCaseType === 'All' ? 'Cases this month' : `${selectedCaseType} cases`}
+                {selectedCaseType === 'All' ? 'Events this month' : `${selectedCaseType} events`}
               </div>
               <div className="text-xl md:text-2xl font-bold text-blue-700">
-                {loading ? '...' : getFilteredCasesCount()}
+                {loading ? '...' : getFilteredEventsCount()}
               </div>
             </div>
           </div>
@@ -438,7 +479,11 @@ const LegalCalendar = () => {
             </div>
             <div className="flex items-center text-xs md:text-sm text-gray-600">
               <Scale className="w-3 h-3 mr-2 text-blue-600" />
-              Cases scheduled
+              Hearings
+            </div>
+            <div className="flex items-center text-xs md:text-sm text-gray-600">
+              <Clock className="w-3 h-3 mr-2 text-amber-600" />
+              Adjournments
             </div>
           </div>
           
