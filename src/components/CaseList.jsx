@@ -17,7 +17,8 @@ import {
   Shield,
   Gavel,
   Users,
-  CalendarCheck
+  CalendarCheck,
+  CalendarX // New icon for adjourned cases
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/firebase';
@@ -42,12 +43,14 @@ const CaseList = () => {
   const { date } = useParams();
   const navigate = useNavigate();
   const [cases, setCases] = useState([]);
+  const [adjournedCases, setAdjournedCases] = useState([]); // New state for adjourned cases
   const [expandedCase, setExpandedCase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState('user');
   const [adjournModal, setAdjournModal] = useState(null);
+  const [showAdjourned, setShowAdjourned] = useState(false); // Toggle for showing adjourned cases
 
   // Track authentication state and fetch user role
   useEffect(() => {
@@ -104,6 +107,21 @@ const CaseList = () => {
     return dates;
   };
 
+  // Check if a case has been adjourned from the current date
+  const hasAdjournmentFromCurrentDate = (caseItem, currentDate) => {
+    if (!caseItem.adjournHistory || !Array.isArray(caseItem.adjournHistory)) return false;
+    
+    return caseItem.adjournHistory.some(adjournment => {
+      try {
+        const adjournDate = new Date(adjournment.date);
+        const current = new Date(currentDate);
+        return adjournDate.toDateString() === current.toDateString();
+      } catch (e) {
+        return false;
+      }
+    });
+  };
+
   useEffect(() => {
     if (!currentUser || !userRole) return;
     setLoading(true);
@@ -137,18 +155,41 @@ const CaseList = () => {
         snapshot.forEach(d => all.push({ id: d.id, ...d.data() }));
 
         const filtered = [];
+        const adjourned = [];
+        
         all.forEach(caseDoc => {
           const hearingDates = parseHearingDate(caseDoc);
+          let isToday = false;
+          
           for (const dateObj of hearingDates) {
             if (!dateObj) continue;
             if (dateObj >= startOfDay && dateObj <= endOfDay) {
               filtered.push({ ...caseDoc, parsedHearingDate: dateObj });
+              isToday = true;
               break;
             }
+          }
+          
+          // Check if this case was adjourned from today's date
+          if (!isToday && hasAdjournmentFromCurrentDate(caseDoc, startOfDay)) {
+            adjourned.push({ 
+              ...caseDoc, 
+              isAdjournedFromToday: true,
+              // Find the adjournment record for today
+              todayAdjournment: caseDoc.adjournHistory.find(adj => {
+                try {
+                  const adjDate = new Date(adj.date);
+                  return adjDate.toDateString() === startOfDay.toDateString();
+                } catch (e) {
+                  return false;
+                }
+              })
+            });
           }
         });
 
         setCases(filtered);
+        setAdjournedCases(adjourned);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching cases:', err);
@@ -275,61 +316,60 @@ const CaseList = () => {
   };
 
   // Improved generatePdfBlob: scale to fit both width & height of A4 (prevents clipping)
-const generatePdfBlob = async (casesArray) => {
-  if (!casesArray || casesArray.length === 0) return null;
+  const generatePdfBlob = async (casesArray) => {
+    if (!casesArray || casesArray.length === 0) return null;
 
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 12;
-  const availWidth = pageWidth - margin * 2;
-  const lineHeight = 7;
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 12;
+    const availWidth = pageWidth - margin * 2;
+    const lineHeight = 7;
 
-  let y = margin;
+    let y = margin;
 
-  casesArray.forEach((c, i) => {
-    const court = renderCourt(c);
-    const hearing = c.hearingDate
-      ? `${formatDate(c.hearingDate)} ${formatHearingTime(c.hearingDate)}`
-      : '—';
-    const title = c.caseTitle || 'Untitled Case';
-    const num = c.caseNumber || (c.id ? `#${c.id.slice(-6)}` : '—');
-    const party = c.partyName || '—';
-    const stage = c.caseStage || '—';
-    const desc =
-      c.caseDescription && c.caseDescription.length > 120
-        ? c.caseDescription.slice(0, 117) + '…'
-        : c.caseDescription || '';
+    casesArray.forEach((c, i) => {
+      const court = renderCourt(c);
+      const hearing = c.hearingDate
+        ? `${formatDate(c.hearingDate)} ${formatHearingTime(c.hearingDate)}`
+        : '—';
+      const title = c.caseTitle || 'Untitled Case';
+      const num = c.caseNumber || (c.id ? `#${c.id.slice(-6)}` : '—');
+      const party = c.partyName || '—';
+      const stage = c.caseStage || '—';
+      const desc =
+        c.caseDescription && c.caseDescription.length > 120
+          ? c.caseDescription.slice(0, 117) + '…'
+          : c.caseDescription || '';
 
-    const lines = [
-      `${i + 1}. ${title}`,
-      `   Case #: ${num}   •   Stage: ${stage}`,
-      `   Court: ${court}`,
-      `   Party: ${party}`,
-      `   Hearing: ${hearing}`,
-      desc ? `   Desc: ${desc}` : '',
-    ].filter(Boolean);
+      const lines = [
+        `${i + 1}. ${title}`,
+        `   Case #: ${num}   •   Stage: ${stage}`,
+        `   Court: ${court}`,
+        `   Party: ${party}`,
+        `   Hearing: ${hearing}`,
+        desc ? `   Desc: ${desc}` : '',
+      ].filter(Boolean);
 
-    // Check if adding these lines fits current page, else new page
-    if (y + lines.length * lineHeight > pageHeight - margin) {
-      pdf.addPage();
-      y = margin;
-    }
+      // Check if adding these lines fits current page, else new page
+      if (y + lines.length * lineHeight > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
 
-    lines.forEach((line) => {
-      pdf.text(line, margin, y);
+      lines.forEach((line) => {
+        pdf.text(line, margin, y);
+        y += lineHeight;
+      });
+
+      // Add a separator line between cases
+      pdf.setDrawColor(200);
+      pdf.line(margin, y, pageWidth - margin, y);
       y += lineHeight;
     });
 
-    // Add a separator line between cases
-    pdf.setDrawColor(200);
-    pdf.line(margin, y, pageWidth - margin, y);
-    y += lineHeight;
-  });
-
-  return pdf.output('blob');
-};
-
+    return pdf.output('blob');
+  };
 
   const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
@@ -465,16 +505,29 @@ const generatePdfBlob = async (casesArray) => {
         </div>
       </div>
 
-      {/* Summary + Cases (rest unchanged) */}
+      {/* Summary + Cases */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-100 shadow-sm">
           <h3 className="text-lg font-semibold text-blue-800">{cases.length ? 'Total Cases' : 'No Cases'}</h3>
           <p className="text-3xl font-bold text-blue-900 mt-2">{cases.length}</p>
         </div>
-       
+        
+        {/* Adjourned Cases Summary Card */}
+        {adjournedCases.length > 0 && (
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-100 shadow-sm">
+            <h3 className="text-lg font-semibold text-orange-800">Adjourned Cases</h3>
+            <p className="text-3xl font-bold text-orange-900 mt-2">{adjournedCases.length}</p>
+            <button 
+              onClick={() => setShowAdjourned(!showAdjourned)} 
+              className="mt-2 text-sm text-orange-700 hover:text-orange-900 underline"
+            >
+              {showAdjourned ? 'Hide' : 'Show'} adjourned cases
+            </button>
+          </div>
+        )}
       </div>
 
-      {cases.length === 0 ? (
+      {cases.length === 0 && adjournedCases.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-md p-8 text-center border border-gray-100">
           <CalendarIcon className="w-16 h-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-xl font-semibold text-gray-700 mb-2">No cases found</h3>
@@ -483,6 +536,7 @@ const generatePdfBlob = async (casesArray) => {
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Regular Cases */}
           {cases.map(caseItem => (
             <div key={caseItem.id} className={`bg-white rounded-2xl shadow-md overflow-hidden border transition-all duration-200 ${expandedCase === caseItem.id ? 'border-blue-300 shadow-lg' : 'border-gray-100 hover:border-blue-200 hover:shadow-lg'}`}>
               {/* Court Header - Added prominently at the top */}
@@ -596,6 +650,136 @@ const generatePdfBlob = async (casesArray) => {
               )}
             </div>
           ))}
+
+          {/* Adjourned Cases Section */}
+          {showAdjourned && adjournedCases.length > 0 && (
+            <div className="mt-8">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <CalendarX className="w-6 h-6 mr-2 text-orange-600" />
+                Cases Adjourned from This Date
+              </h2>
+              
+              {adjournedCases.map(caseItem => (
+                <div key={caseItem.id} className={`bg-orange-50 rounded-2xl shadow-md overflow-hidden border border-orange-200 transition-all duration-200 mb-5 ${expandedCase === caseItem.id ? 'border-orange-400 shadow-lg' : 'hover:border-orange-300 hover:shadow-lg'}`}>
+                  {/* Court Header with Adjourned Badge */}
+                  <div className="bg-orange-100 px-5 py-3 border-b border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Gavel className="w-5 h-5 text-orange-700 mr-2" />
+                        <span className="font-bold text-orange-800 text-lg">{renderCourt(caseItem)}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full mr-2">Adjourned</span>
+                        <div className="text-sm text-orange-600 font-medium">
+                          Now on: {caseItem.hearingDate ? new Date(caseItem.hearingDate).toLocaleDateString() : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-5 cursor-pointer" onClick={() => toggleExpand(caseItem.id)}>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-start gap-3">
+                          <div className="bg-orange-100 p-3 rounded-lg"><Briefcase className="w-5 h-5 text-orange-700" /></div>
+                          <div className="flex-1">
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">{caseItem.caseTitle || 'Untitled Case'}</h3>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm text-gray-600">Case #: {caseItem.caseNumber || `#${caseItem.id?.slice(-6) || 'Unknown'}`}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(caseItem.priority)}`}>{caseItem.priority || 'Standard'}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(caseItem.status)}`}>{caseItem.status || 'Unknown'}</span>
+                            </div>
+                            <p className="text-gray-600 flex items-center mb-1"><User className="w-4 h-4 mr-2" />{caseItem.partyName ? `${caseItem.partyName} (${caseItem.onBehalfOf})` : '—'}</p>
+                            {caseItem.todayAdjournment && (
+                              <p className="text-sm text-orange-600 flex items-center">
+                                <CalendarX className="w-4 h-4 mr-1" />
+                                Adjourned from today: {caseItem.todayAdjournment.reason || 'No reason provided'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button className="p-2 text-gray-500 hover:text-gray-700 transition-colors">{expandedCase === caseItem.id ? <ChevronUp /> : <ChevronDown />}</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {expandedCase === caseItem.id && (
+                    <div className="border-t border-orange-200 px-5 py-6 bg-orange-50">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Same expanded content as regular cases */}
+                        <div className="space-y-4">
+                          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                            <h4 className="font-bold text-gray-800 mb-4 flex items-center"><FileText className="w-5 h-5 mr-2 text-blue-600" />Case Overview</h4>
+                            <div className="space-y-3">
+                              <div><p className="text-sm text-gray-500">Case Title</p><p className="font-medium">{caseItem.caseTitle || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Case Number</p><p className="font-medium">{caseItem.caseNumber || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">On Behalf Of</p><p className="font-medium">{caseItem.onBehalfOf || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Case Stage</p><p className="font-medium">{caseItem.caseStage || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Party Name</p><p className="font-medium">{caseItem.partyName || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Complainant Name</p><p className="font-medium">{caseItem.complainantName || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Location</p><p className="font-medium">{caseItem.location || '—'}</p></div>
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                            <h4 className="font-bold text-gray-800 mb-4 flex items-center"><Gavel className="w-5 h-5 mr-2 text-purple-600" />Legal Details</h4>
+                            <div className="space-y-3">
+                              <div><p className="text-sm text-gray-500">U/Sec or Nature of Suit</p><p className="font-medium">{caseItem.underSection || '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Hearing Date</p><p className="font-medium">{caseItem.hearingDate ? new Date(caseItem.hearningDate).toLocaleDateString() : '—'}</p></div>
+                              <div><p className="text-sm text-gray-500">Adjourn Date</p><p className="font-medium">{formatDate(caseItem.adjournDate) || '—'}</p></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                            <h4 className="font-bold text-gray-800 mb-4 flex items-center"><Scale className="w-5 h-5 mr-2 text-purple-600" />Case Metrics</h4>
+                            <div className="space-y-4">
+                              <div><div className="flex justify-between items-center mb-2"><p className="text-sm text-gray-500">Progress</p><p className="text-sm font-medium">{caseItem.progress || 0}%</p></div><div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${caseItem.progress || 0}%` }}></div></div></div>
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                            <h4 className="font-bold text-gray-800 mb-4 flex items-center"><FileText className="w-5 h-5 mr-2 text-blue-600" />Case Description</h4>
+                            <p className="text-gray-700">{caseItem.caseDescription || 'No description provided.'}</p>
+                          </div>
+
+                          {caseItem.adjournHistory && caseItem.adjournHistory.length > 0 && (
+                            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                              <h4 className="font-bold text-gray-800 mb-4 flex items-center"><CalendarCheck className="w-5 h-5 mr-2 text-blue-600" />Adjournment History</h4>
+                              <div className="space-y-3">
+                                {caseItem.adjournHistory.map((adjournment, index) => (
+                                  <div key={index} className={`border-l-4 pl-3 py-2 ${adjournment.date === caseItem.todayAdjournment?.date ? 'border-orange-400 bg-orange-50' : 'border-blue-200'}`}>
+                                    <div className="flex justify-between items-start">
+                                      <p className="font-medium text-gray-800">{adjournment.date ? new Date(adjournment.date).toLocaleDateString() : 'No date'}</p>
+                                      <span className="text-xs text-gray-500">{adjournment.updatedAt ? new Date(adjournment.updatedAt).toLocaleDateString() : ''}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mt-1">{adjournment.reason || 'No reason provided'}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                            <div className="flex flex-wrap gap-3">
+                              <button onClick={() => navigate(`/edit-form/${caseItem.id}`)} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Edit Case</button>
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 flex justify-between">
+                              <span>Created: {caseItem.createdAt ? new Date(caseItem.createdAt).toLocaleDateString() : '—'}</span>
+                              <span>Updated: {caseItem.updatedAt ? new Date(caseItem.updatedAt).toLocaleDateString() : '—'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {adjournModal && (

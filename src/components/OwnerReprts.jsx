@@ -1,26 +1,15 @@
 // Reports.jsx
-// Owner-only analytics page for a Legal Management System
-// Tech: React (JS) + Tailwind CSS + Framer Motion + Recharts + Firebase v9 (modular) + react-to-print
-// -------------------------------------------------------------------------------------------------
-// Install deps:
-// npm i firebase framer-motion recharts react-icons react-router-dom react-to-print
-// -------------------------------------------------------------------------------------------------
-// Firestore data model used:
-//
-// cases:   { id, title, status, priority, caseDate(Timestamp|Date), fee(Number), paymentReceived(Number), assignedTo: string[] }
-// clients: { id, name, createdAt(Timestamp|Date), contactInfo }
-// Users:   { id === auth.uid, email, firstName, lastName, photo, role("store_owner" | "associate" | ...), active(Boolean), createdAt(Timestamp|Date) }
-//
-// IMPORTANT: Your schema shows the collection is named "Users" (capital U) and the doc ID equals the auth UID.
-// This file loads the profile from doc(db, "Users", user.uid) and falls back to "users" if needed.
-// -------------------------------------------------------------------------------------------------
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
+  BarChart,
+  Bar,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -37,39 +26,26 @@ import {
   FiDownload,
   FiPrinter,
   FiAlertTriangle,
+  FiCalendar,
+  FiMapPin,
+  FiUser,
+  FiPieChart
 } from "react-icons/fi";
 import { useReactToPrint } from "react-to-print";
-
-/* ---------------------------- Firebase (v9 modular) ---------------------------- */
-import { initializeApp, getApps } from "firebase/app";
+import { db, auth } from '../firebase/firebase';
 import {
-  getFirestore,
   collection,
-  collectionGroup,
   query,
   where,
   orderBy,
   onSnapshot,
   doc,
   getDoc,
+  getDocs
 } from "firebase/firestore";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 
-/* --------------------------- Replace with your config --------------------------- */
-const firebaseConfig = {
-  apiKey: "REPLACE_API_KEY",
-  authDomain: "REPLACE_AUTH_DOMAIN",
-  projectId: "REPLACE_PROJECT_ID",
-  storageBucket: "REPLACE_STORAGE_BUCKET",
-  messagingSenderId: "REPLACE_MSG_SENDER_ID",
-  appId: "REPLACE_APP_ID",
-};
-// Initialize once (or remove if already initialized in your app root)
-if (!getApps().length) initializeApp(firebaseConfig);
-const db = getFirestore();
-const auth = getAuth();
-
-/* ---------------------------- helpers / utilities ---------------------------- */
+// Helper functions
 const container = {
   hidden: { opacity: 0, y: 8 },
   show: { opacity: 1, y: 0, transition: { staggerChildren: 0.05 } },
@@ -109,36 +85,50 @@ function exportCSV(filename = "reports.csv", rows = []) {
   document.body.removeChild(a);
 }
 
-/* ---------------------------------- Component --------------------------------- */
+// Court name extraction function
+const getCourtName = (caseData, courtsData) => {
+  if (caseData.court) {
+    if (typeof caseData.court === 'string') return caseData.court;
+    if (typeof caseData.court === 'object') {
+      return caseData.court.name || caseData.court.courtName || caseData.court.title || 'No Court Assigned';
+    }
+  }
+  
+  if (caseData.courtId && courtsData[caseData.courtId]) {
+    return courtsData[caseData.courtId].name || 'No Court Assigned';
+  }
+  
+  return 'No Court Assigned';
+};
+
 export default function Reports() {
   const printRef = useRef(null);
-
-  // 1) Auth + role gate states
   const [authReady, setAuthReady] = useState(false);
   const [roleChecked, setRoleChecked] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
 
-  // 2) Filters (default: last 6 months to today)
+  // Date filters
   const today = new Date();
   const startDefault = new Date(today);
   startDefault.setMonth(today.getMonth() - 6);
   const [startDate, setStartDate] = useState(toDateInput(startDefault));
   const [endDate, setEndDate] = useState(toDateInput(today));
 
-  // 3) Data states
+  // Data states
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [cases, setCases] = useState([]);
   const [clients, setClients] = useState([]);
-  const [associates, setAssociates] = useState([]); // users with role == "associate"
+  const [associates, setAssociates] = useState([]);
+  const [courts, setCourts] = useState({});
 
-  // 4) Print
+  // Print functionality
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
     documentTitle: `LMS-Reports-${new Date().toISOString()}`,
   });
 
-  /* --------------------- Auth + profile loader (capital "Users") --------------------- */
+  // Auth and role check
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -149,10 +139,9 @@ export default function Reports() {
       }
       setAuthReady(true);
       try {
-        // First try "Users" (your schema), then fall back to "users"
         let snap = await getDoc(doc(db, "Users", user.uid));
         if (!snap.exists()) {
-          snap = await getDoc(doc(db, "users", user.uid)); // fallback if you later rename
+          snap = await getDoc(doc(db, "users", user.uid));
         }
         const profile = snap.exists() ? snap.data() : null;
         const owner = profile?.role === "store_owner";
@@ -167,7 +156,7 @@ export default function Reports() {
     return () => unsub();
   }, []);
 
-  /* ---------------------------- Firestore listeners ---------------------------- */
+  // Fetch data
   useEffect(() => {
     if (!authReady || !roleChecked || !isOwner) return;
 
@@ -178,146 +167,209 @@ export default function Reports() {
     const e = new Date(endDate);
     e.setHours(23, 59, 59, 999);
 
-    // Cases in date range — requires index on caseDate asc with range filters if prompted
-    const qCases = query(
-      collection(db, "cases"),
-      where("caseDate", ">=", s),
-      where("caseDate", "<=", e),
-      orderBy("caseDate", "asc")
-    );
-
-    // Clients — light dataset; we read all and filter client-side for "new this month"
-    const qClients = query(collection(db, "clients"));
-
-    // Associates — your model stores associates in Users with role === "associate"
-    const qAssociates = query(collection(db, "Users"), where("role", "==", "associate"));
-
-    const unsubCases = onSnapshot(
-      qCases,
-      (snap) => setCases(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (e2) => {
-        console.error(e2);
-        setErr(e2.message || "Failed to load cases");
-      }
-    );
-
-    const unsubClients = onSnapshot(
-      qClients,
-      (snap) => setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (e2) => {
-        console.error(e2);
-        setErr((prev) => prev || e2.message || "Failed to load clients");
-      }
-    );
-
-    const unsubUsers = onSnapshot(
-      qAssociates,
-      (snap) => {
-        setAssociates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLoading(false);
-      },
-      (e2) => {
-        console.error(e2);
-        setErr((prev) => prev || e2.message || "Failed to load associates");
+    // Fetch courts first
+    const fetchCourts = async () => {
+      try {
+        const courtsSnapshot = await getDocs(collection(db, 'courts'));
+        const courtsData = {};
+        courtsSnapshot.forEach((doc) => {
+          courtsData[doc.id] = doc.data();
+        });
+        setCourts(courtsData);
+        
+        // Now fetch other data
+        fetchOtherData(courtsData);
+      } catch (error) {
+        console.error('Error fetching courts:', error);
+        setErr('Failed to load courts data');
         setLoading(false);
       }
-    );
-
-    return () => {
-      unsubCases();
-      unsubClients();
-      unsubUsers();
     };
+
+    const fetchOtherData = (courtsData) => {
+      // Cases in date range
+      const qCases = query(
+        collection(db, "cases"),
+        where("createdAt", ">=", s),
+        where("createdAt", "<=", e),
+        orderBy("createdAt", "asc")
+      );
+
+      // Clients
+      const qClients = query(collection(db, "clients"));
+
+      // Associates
+      const qAssociates = query(collection(db, "Users"), where("role", "==", "associate"));
+
+      const unsubCases = onSnapshot(
+        qCases,
+        (snap) => {
+          const casesData = snap.docs.map((d) => {
+            const data = d.data();
+            return { 
+              id: d.id, 
+              ...data,
+              courtName: getCourtName(data, courtsData)
+            };
+          });
+          setCases(casesData);
+        },
+        (e2) => {
+          console.error(e2);
+          setErr(e2.message || "Failed to load cases");
+        }
+      );
+
+      const unsubClients = onSnapshot(
+        qClients,
+        (snap) => setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+        (e2) => {
+          console.error(e2);
+          setErr((prev) => prev || e2.message || "Failed to load clients");
+        }
+      );
+
+      const unsubUsers = onSnapshot(
+        qAssociates,
+        (snap) => {
+          setAssociates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          setLoading(false);
+        },
+        (e2) => {
+          console.error(e2);
+          setErr((prev) => prev || e2.message || "Failed to load associates");
+          setLoading(false);
+        }
+      );
+
+      return () => {
+        unsubCases();
+        unsubClients();
+        unsubUsers();
+      };
+    };
+
+    fetchCourts();
   }, [authReady, roleChecked, isOwner, startDate, endDate]);
 
-  /* ---------------------------- Derived metrics ---------------------------- */
-  // Cases overview
+  // Derived metrics
   const totalCases = cases.length;
-  const closedCases = cases.filter((c) => c.status === "closed").length;
-  const pendingCases = cases.filter((c) => c.status === "pending").length;
-  const urgentCases = cases.filter((c) => c.priority === "urgent").length;
+  const closedCases = cases.filter((c) => c.status === "closed" || c.status === "Closed").length;
+  const pendingCases = cases.filter((c) => c.status === "pending" || c.status === "Pending").length;
+  const activeCases = cases.filter((c) => c.status === "active" || c.status === "Active").length;
+  const urgentCases = cases.filter((c) => c.priority === "urgent" || c.priority === "Urgent").length;
 
-  // Clients overview
-  const totalClients = clients.length;
-  const newClientsThisMonth = useMemo(() => {
-    const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    return clients.filter((cl) => {
-      const d = toJSDate(cl.createdAt);
-      return d && d >= firstOfMonth;
-    }).length;
-  }, [clients]);
+  // Financial overview
+  const totalFees = sum(cases.map((c) => parseFloat(c.caseValue) || 0));
+  const receivedPayments = sum(cases.map((c) => parseFloat(c.paymentReceived) || 0));
+  const outstandingBalance = Math.max(0, totalFees - receivedPayments);
 
-  // Associates overview
-  const associatesActive = associates.filter((u) => u.active === true).length;
-  const associatesInactive = associates.filter((u) => u.active === false).length;
-
-  // Financial overview from cases in range
-  const billed = sum(cases.map((c) => c.fee || 0));
-  const received = sum(cases.map((c) => c.paymentReceived || 0));
-  const outstanding = Math.max(0, billed - received);
-
-  // Monthly trends (opened vs closed counts for last 6 months within selected range)
-  const trendData = useMemo(() => {
-    const end = new Date(endDate);
-    const buckets = {};
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(end.getFullYear(), end.getMonth() - i, 1);
-      buckets[monthKey(d)] = {
-        month: d.toLocaleString("default", { month: "short" }),
-        opened: 0,
-        closed: 0,
-      };
-    }
+  // Case type distribution
+  const caseTypeData = useMemo(() => {
+    const types = {};
     cases.forEach((c) => {
-      const openedDate = toJSDate(c.caseDate);
-      if (openedDate) {
-        const mk = monthKey(new Date(openedDate.getFullYear(), openedDate.getMonth(), 1));
-        if (buckets[mk]) buckets[mk].opened += 1;
-      }
-      // If you store closedAt, use it instead of this approximation
-      if (c.status === "closed") {
-        const d = openedDate || new Date();
-        const mk = monthKey(new Date(d.getFullYear(), d.getMonth(), 1));
-        if (buckets[mk]) buckets[mk].closed += 1;
+      const type = c.caseType || "Unknown";
+      types[type] = (types[type] || 0) + 1;
+    });
+    return Object.entries(types).map(([name, value]) => ({ name, value }));
+  }, [cases]);
+
+  // Status distribution
+  const statusData = useMemo(() => {
+    const statuses = {};
+    cases.forEach((c) => {
+      const status = c.status || "Unknown";
+      statuses[status] = (statuses[status] || 0) + 1;
+    });
+    return Object.entries(statuses).map(([name, value]) => ({ name, value }));
+  }, [cases]);
+
+  // Monthly case trends
+  const monthlyData = useMemo(() => {
+    const months = {};
+    cases.forEach((c) => {
+      const date = toJSDate(c.createdAt);
+      if (date) {
+        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!months[monthYear]) {
+          months[monthYear] = {
+            month: date.toLocaleString('default', { month: 'short', year: 'numeric' }),
+            cases: 0,
+            revenue: 0
+          };
+        }
+        months[monthYear].cases += 1;
+        months[monthYear].revenue += parseFloat(c.caseValue) || 0;
       }
     });
-    return Object.values(buckets);
-  }, [cases, endDate]);
+    return Object.values(months);
+  }, [cases]);
 
-  // Top performing associates (by number of cases assigned in current range)
-  const associateNameById = useMemo(() => {
-    const map = {};
-    associates.forEach((u) => (map[u.id] = u.firstName || u.name || "Unnamed"));
-    return map;
-  }, [associates]);
-
-  const topAssociates = useMemo(() => {
-    const counts = {};
+  // Court distribution
+  const courtData = useMemo(() => {
+    const courts = {};
     cases.forEach((c) => {
-      (c.assignedTo || []).forEach((uid) => {
-        counts[uid] = (counts[uid] || 0) + 1;
-      });
+      const court = c.courtName || "Unknown Court";
+      courts[court] = (courts[court] || 0) + 1;
     });
-    const rows = Object.entries(counts).map(([uid, count]) => ({
-      uid,
-      name: associateNameById[uid] || uid,
-      cases: count,
+    return Object.entries(courts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [cases]);
+
+  // Top performing associates
+  const associatePerformance = useMemo(() => {
+    const performance = {};
+    cases.forEach((c) => {
+      if (c.assignedTo && Array.isArray(c.assignedTo)) {
+        c.assignedTo.forEach(uid => {
+          if (!performance[uid]) {
+            performance[uid] = { cases: 0, revenue: 0 };
+          }
+          performance[uid].cases += 1;
+          performance[uid].revenue += parseFloat(c.caseValue) || 0;
+        });
+      }
+    });
+    
+    return Object.entries(performance)
+      .map(([uid, data]) => {
+        const associate = associates.find(a => a.id === uid) || {};
+        return {
+          uid,
+          name: associate.firstName || associate.name || "Unknown Associate",
+          cases: data.cases,
+          revenue: data.revenue
+        };
+      })
+      .sort((a, b) => b.cases - a.cases)
+      .slice(0, 10);
+  }, [cases, associates]);
+
+  // Export functions
+  const exportCaseDataCSV = () => {
+    const rows = cases.map(c => ({
+      'Case Number': c.caseNumber,
+      'Title': c.caseTitle,
+      'Court': c.courtName,
+      'Status': c.status,
+      'Type': c.caseType,
+      'Value': c.caseValue,
+      'Created': c.createdAt ? toJSDate(c.createdAt).toLocaleDateString() : 'N/A'
     }));
-    return rows.sort((a, b) => b.cases - a.cases).slice(0, 10);
-  }, [cases, associateNameById]);
+    exportCSV(`cases_${startDate}_to_${endDate}.csv`, rows);
+  };
 
-  // Exports
-  const exportTopAssociatesCSV = () =>
-    exportCSV("top_associates.csv", topAssociates);
-  const exportFinancialCSV = () =>
+  const exportFinancialCSV = () => {
     exportCSV("financial_overview.csv", [
-      { metric: "Total Billed", amount: billed },
-      { metric: "Received", amount: received },
-      { metric: "Outstanding", amount: outstanding },
+      { metric: "Total Fees", amount: totalFees },
+      { metric: "Received Payments", amount: receivedPayments },
+      { metric: "Outstanding Balance", amount: outstandingBalance },
     ]);
+  };
 
-  /* --------------------------- Route guard rendering -------------------------- */
+  // Route guard
   if (!authReady || !roleChecked) {
     return (
       <div className="min-h-screen grid place-items-center bg-gray-50 dark:bg-gray-900">
@@ -329,18 +381,19 @@ export default function Reports() {
     );
   }
   if (!isOwner) {
-    // Only redirect AFTER we've checked the role to avoid flash loops
     return <Navigate to="/dashboard" replace />;
   }
 
-  /* --------------------------------- UI Render -------------------------------- */
+  // Colors for charts
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
   return (
     <div className="min-h-screen p-6 bg-gray-50 dark:bg-gray-900">
-      {/* Filter bar & actions */}
+      {/* Header and Filters */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Reports</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-300">Owner dashboard analytics & exports</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Reports & Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-300">Comprehensive legal case analytics and insights</p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -374,10 +427,7 @@ export default function Reports() {
               <FiPrinter /> Export PDF
             </button>
             <button
-              onClick={() => {
-                exportFinancialCSV();
-                exportTopAssociatesCSV();
-              }}
+              onClick={exportCaseDataCSV}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:scale-[1.01] transition"
             >
               <FiDownload /> Export CSV
@@ -400,129 +450,212 @@ export default function Reports() {
 
       {/* Printable content */}
       <div ref={printRef} className="space-y-6">
-        {/* OVERVIEW CARDS */}
+        {/* Overview Cards */}
         <motion.div
           variants={container}
           initial="hidden"
           animate="show"
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
         >
-          {/* Cases */}
+          {/* Cases Card */}
           <motion.div variants={item} className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-500 dark:text-gray-300">Total Cases</div>
-              <FiBriefcase className="text-[#3B82F6]" />
+              <FiBriefcase className="text-blue-500" />
             </div>
             <div className="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
               {loading ? "…" : totalCases}
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-              <span className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200">
-                Closed: {closedCases}
+              <span className="px-2 py-1 rounded bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-200">
+                Active: {activeCases}
               </span>
               <span className="px-2 py-1 rounded bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-200">
                 Pending: {pendingCases}
               </span>
-              <span className="px-2 py-1 rounded bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200">
-                Urgent: {urgentCases}
+              <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                Closed: {closedCases}
               </span>
             </div>
           </motion.div>
 
-          {/* Clients */}
+          {/* Financial Card */}
           <motion.div variants={item} className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-500 dark:text-gray-300">Total Clients</div>
-              <FiUsers className="text-[#3B82F6]" />
+              <div className="text-sm text-gray-500 dark:text-gray-300">Financial Overview</div>
+              <FiDollarSign className="text-green-500" />
             </div>
-            <div className="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
-              {loading ? "…" : totalClients}
-            </div>
-            <div className="mt-3 text-xs text-gray-500 dark:text-gray-300">
-              New this month:{" "}
-              <span className="font-medium text-gray-900 dark:text-white">{newClientsThisMonth}</span>
+            <div className="mt-3 text-sm space-y-1 text-gray-700 dark:text-gray-100">
+              <div className="flex justify-between">
+                <span>Total Fees</span>
+                <strong>₹ {totalFees.toLocaleString()}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Received</span>
+                <strong>₹ {receivedPayments.toLocaleString()}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Outstanding</span>
+                <strong>₹ {outstandingBalance.toLocaleString()}</strong>
+              </div>
             </div>
           </motion.div>
 
-          {/* Associates */}
+          {/* Clients Card */}
+          <motion.div variants={item} className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-500 dark:text-gray-300">Total Clients</div>
+              <FiUsers className="text-purple-500" />
+            </div>
+            <div className="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
+              {loading ? "…" : clients.length}
+            </div>
+            <div className="mt-3 text-xs text-gray-500 dark:text-gray-300">
+              New this period:{" "}
+              <span className="font-medium text-gray-900 dark:text-white">
+                {clients.filter(c => {
+                  const created = toJSDate(c.createdAt);
+                  return created && created >= new Date(startDate) && created <= new Date(endDate);
+                }).length}
+              </span>
+            </div>
+          </motion.div>
+
+          {/* Associates Card */}
           <motion.div variants={item} className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-500 dark:text-gray-300">Associates</div>
-              <FiUsers className="text-[#3B82F6]" />
+              <FiUser className="text-indigo-500" />
             </div>
             <div className="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
               {loading ? "…" : associates.length}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <span className="px-2 py-1 rounded bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-200">
-                Active: {associatesActive}
+              <span className="px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200">
+                Active: {associates.filter(a => a.active !== false).length}
               </span>
               <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
-                Inactive: {associatesInactive}
+                Inactive: {associates.filter(a => a.active === false).length}
               </span>
-            </div>
-          </motion.div>
-
-          {/* Financials */}
-          <motion.div variants={item} className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-500 dark:text-gray-300">Financial Overview</div>
-              <FiDollarSign className="text-[#3B82F6]" />
-            </div>
-            <div className="mt-3 text-sm space-y-1 text-gray-700 dark:text-gray-100">
-              <div className="flex justify-between">
-                <span>Total billed</span>
-                <strong>₹ {billed.toLocaleString()}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Received</span>
-                <strong>₹ {received.toLocaleString()}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Outstanding</span>
-                <strong>₹ {outstanding.toLocaleString()}</strong>
-              </div>
             </div>
           </motion.div>
         </motion.div>
 
-        {/* MONTHLY TRENDS */}
-        <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <FiTrendingUp className="text-[#3B82F6]" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monthly Trends (Opened vs Closed)</h2>
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Monthly Case Trends */}
+          <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FiTrendingUp className="text-blue-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monthly Case Trends</h2>
+              </div>
             </div>
-          </div>
+            <div className="w-full h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => [`${value}`, value === parseInt(value) ? 'Cases' : 'Revenue']} />
+                  <Legend />
+                  <Bar dataKey="cases" name="Cases" fill="#3B82F6" />
+                  <Bar dataKey="revenue" name="Revenue (₹)" fill="#10B981" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.section>
 
-          <div className="w-full h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="opened" stroke="#3B82F6" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="closed" stroke="#10B981" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.section>
+          {/* Case Type Distribution */}
+          <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FiPieChart className="text-purple-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Case Type Distribution</h2>
+              </div>
+            </div>
+            <div className="w-full h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={caseTypeData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {caseTypeData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} cases`, 'Count']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.section>
 
-        {/* TOP PERFORMING ASSOCIATES */}
+          {/* Status Distribution */}
+          <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FiPieChart className="text-green-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Case Status Distribution</h2>
+              </div>
+            </div>
+            <div className="w-full h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`${value} cases`, 'Count']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.section>
+
+          {/* Court Distribution */}
+          <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FiMapPin className="text-red-500" />
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Court Distribution (Top 10)</h2>
+              </div>
+            </div>
+            <div className="w-full h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={courtData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="name" width={100} />
+                  <Tooltip formatter={(value) => [`${value} cases`, 'Count']} />
+                  <Legend />
+                  <Bar dataKey="value" name="Cases" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.section>
+        </div>
+
+        {/* Top Performing Associates */}
         <motion.section variants={item} initial="hidden" animate="show" className="p-5 rounded-2xl bg-white dark:bg-gray-800 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <FiUsers className="text-[#3B82F6]" />
+              <FiUsers className="text-indigo-500" />
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Top Performing Associates</h2>
             </div>
-            <button
-              onClick={exportTopAssociatesCSV}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:scale-[1.01] transition"
-            >
-              <FiDownload /> CSV
-            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -531,20 +664,22 @@ export default function Reports() {
                 <tr className="text-left text-xs text-gray-500 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
                   <th className="py-2">#</th>
                   <th className="py-2">Associate</th>
-                  <th className="py-2">Cases (in range)</th>
+                  <th className="py-2">Cases</th>
+                  <th className="py-2">Revenue Generated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {topAssociates.map((row, idx) => (
+                {associatePerformance.map((row, idx) => (
                   <tr key={row.uid} className="hover:bg-gray-50 dark:hover:bg-gray-900">
                     <td className="py-2">{idx + 1}</td>
                     <td className="py-2">{row.name}</td>
                     <td className="py-2">{row.cases}</td>
+                    <td className="py-2">₹ {row.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
-                {topAssociates.length === 0 && (
+                {associatePerformance.length === 0 && (
                   <tr>
-                    <td className="py-3 text-gray-500 dark:text-gray-300" colSpan={3}>
+                    <td className="py-3 text-gray-500 dark:text-gray-300" colSpan={4}>
                       No data in selected date range.
                     </td>
                   </tr>
@@ -554,7 +689,7 @@ export default function Reports() {
           </div>
         </motion.section>
 
-        {/* FOOTER NOTES */}
+        {/* Footer Notes */}
         <div className="text-xs text-gray-500 dark:text-gray-400">
           Generated on {new Date().toLocaleString()} • Date range: {startDate} → {endDate}
         </div>
@@ -572,38 +707,10 @@ export default function Reports() {
 
       {/* Back link */}
       <div className="mt-6">
-        <Link to="/dashboard" className="text-sm text-[#3B82F6] hover:underline">
+        <Link to="/dashboard" className="text-sm text-blue-600 hover:underline">
           ← Back to Dashboard
         </Link>
       </div>
     </div>
   );
 }
-
-/* --------------------------------- Dev Notes ---------------------------------
-1) WHY YOU WERE REDIRECTED:
-   - Your profile is in collection "Users" with docId === auth.uid and role === "store_owner".
-   - Previously we queried collection "users" by authUid field (which doesn't exist), so role check failed.
-
-2) OWNER CHECK (this file):
-   - Loads doc(db, "Users", user.uid). Falls back to "users" if you rename later.
-   - Only after loading do we redirect with <Navigate />, avoiding hydration/flash loops.
-
-3) ASSOCIATES:
-   - Queried as where("role","==","associate") from "Users".
-   - If you use a different role string, change it here.
-
-4) INDEXES YOU MAY NEED:
-   - cases: orderBy("caseDate","asc") with range (>=, <=) -> Create composite index when Console prompts.
-   - If you switch users query, Firestore may ask for indexes; click the error link to create.
-
-5) SECURITY:
-   - This page reads aggregate data only. Ensure your Firestore rules allow read for owners and restrict others.
-
-6) CURRENCY:
-   - Replace the "₹" symbol to your preference.
-
-7) AVOID HTML NESTING ISSUES:
-   - No nested <tbody>. Row animations can be added with motion.tr if needed.
-
--------------------------------------------------------------------------------- */

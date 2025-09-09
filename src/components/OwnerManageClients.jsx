@@ -1,7 +1,6 @@
-// ManageClients.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import {
   FiUser,
   FiPlus,
@@ -13,7 +12,9 @@ import {
   FiFileText,
   FiUsers,
   FiBriefcase,
-  FiUserCheck
+  FiUserCheck,
+  FiMail,
+  FiCalendar
 } from "react-icons/fi";
 
 /* ------------------- Firebase v9 modular ------------------- */
@@ -102,15 +103,22 @@ export default function ManageClients() {
 
   const isOwner = true;
 
-  // Form setup - only name/companyName, contact and location now
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting }, setValue, watch } = useForm({
+  // Form setup - with new fields
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting }, setValue, watch, control } = useForm({
     defaultValues: {
       clientType: "individual",
       name: "",
       companyName: "",
       contact: "",
       location: "",
+      dateOfBirth: "",
+      contactPersons: [{ name: "", email: "" }]
     }
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "contactPersons"
   });
 
   const clientType = watch("clientType");
@@ -203,6 +211,8 @@ export default function ManageClients() {
       companyName: "",
       contact: "",
       location: "",
+      dateOfBirth: "",
+      contactPersons: [{ name: "", email: "" }]
     });
     setShowModal(true);
   }
@@ -214,6 +224,8 @@ export default function ManageClients() {
     setValue("companyName", client.companyName || "");
     setValue("contact", client.contact || "");
     setValue("location", client.location || "");
+    setValue("dateOfBirth", client.dateOfBirth || "");
+    setValue("contactPersons", client.contactPersons || [{ name: "", email: "" }]);
     setShowModal(true);
   }
 
@@ -230,9 +242,13 @@ export default function ManageClients() {
       if (payload.clientType === "corporate") {
         payload.companyName = (data.companyName || "").trim();
         payload.name = ""; // keep name empty for corporate
+        payload.contactPersons = data.contactPersons || [];
+        payload.dateOfBirth = ""; // clear date of birth for corporate
       } else {
         payload.name = (data.name || "").trim();
         payload.companyName = "";
+        payload.dateOfBirth = data.dateOfBirth || "";
+        payload.contactPersons = []; // clear contact persons for individual
       }
 
       if (editingClient) {
@@ -290,6 +306,8 @@ export default function ManageClients() {
       name: c.clientType === "corporate" ? c.companyName : c.name,
       contact: c.contact,
       location: c.location,
+      dateOfBirth: c.dateOfBirth || "",
+      contactPersons: c.contactPersons ? c.contactPersons.map(p => `${p.name} (${p.email})`).join('; ') : "",
       createdAt: fmt(c.createdAt),
     }));
     exportCSV("clients_export.csv", rows);
@@ -358,7 +376,7 @@ export default function ManageClients() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Clients</h1>
           <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
-            Manage clients — add only name, contact and location
+            Manage clients with enhanced details
           </p>
         </div>
 
@@ -591,6 +609,40 @@ export default function ManageClients() {
                       />
                       {errors.companyName && <p className="text-xs text-red-500 mt-1">{errors.companyName.message}</p>}
                     </div>
+
+                    {/* Contact Persons for Corporate */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Contact Persons
+                      </label>
+                      <div className="space-y-2">
+                        {fields.map((field, index) => (
+                          <div key={field.id} className="flex gap-2 items-start">
+                            <input
+                              {...register(`contactPersons.${index}.name`)}
+                              placeholder="Name"
+                              className="flex-1 px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                            />
+                            <input
+                              {...register(`contactPersons.${index}.email`)}
+                              placeholder="Email"
+                              type="email"
+                              className="flex-1 px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                            />
+                            <button type="button" onClick={() => remove(index)} className="px-3 py-2 bg-red-500 text-white rounded-md">
+                              <FiTrash2 />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => append({ name: "", email: "" })}
+                          className="px-3 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-sm"
+                        >
+                          Add Contact Person
+                        </button>
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -604,6 +656,21 @@ export default function ManageClients() {
                         className="w-full px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
                       />
                       {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>}
+                    </div>
+
+                    {/* Date of Birth for Individual */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Date of Birth (Optional)
+                      </label>
+                      <div className="relative">
+                        <FiCalendar className="absolute left-3 top-2.5 text-gray-400" />
+                        <input
+                          type="date"
+                          {...register("dateOfBirth")}
+                          className="w-full pl-10 pr-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                        />
+                      </div>
                     </div>
                   </>
                 )}
@@ -693,6 +760,32 @@ export default function ManageClients() {
                     <div className="text-gray-500 dark:text-gray-400">Location</div>
                     <div className="font-medium">{activeClient.location || "—"}</div>
                   </div>
+                  
+                  {/* Show date of birth for individual clients */}
+                  {activeClient.clientType === "individual" && activeClient.dateOfBirth && (
+                    <div className="md:col-span-2">
+                      <div className="text-gray-500 dark:text-gray-400">Date of Birth</div>
+                      <div className="font-medium">{activeClient.dateOfBirth}</div>
+                    </div>
+                  )}
+                  
+                  {/* Show contact persons for corporate clients */}
+                  {activeClient.clientType === "corporate" && activeClient.contactPersons && activeClient.contactPersons.length > 0 && (
+                    <div className="md:col-span-2">
+                      <div className="text-gray-500 dark:text-gray-400">Contact Persons</div>
+                      <div className="space-y-2 mt-1">
+                        {activeClient.contactPersons.map((person, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <FiUser className="text-gray-400" />
+                            <div>
+                              <div className="font-medium">{person.name}</div>
+                              <div className="text-gray-500 text-xs">{person.email}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
