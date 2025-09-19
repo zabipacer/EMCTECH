@@ -28,6 +28,7 @@ import Reports from './components/OwnerReprts';
 import Documents from './components/AssociateDocuments';
 import AllCasesPage from './components/Allcases';
 import AddCourt from './components/Addcourt';
+import CaseDetails from './components/IdCasedetails';
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -84,6 +85,7 @@ const App = () => {
         <Route path='/documents' element={<Documents/>}/>
              <Route path='/allcases' element={<AllCasesPage/>}/>
              <Route path='/add-court' element={<AddCourt/>}/>
+             <Route path='/idcases/:caseId' element={<CaseDetails/>}/>
      
       </Routes>
     </>

@@ -361,16 +361,26 @@ export default function ManageAssociates() {
     } catch (e) { alert("Failed to send reset: " + (e.message || e)); }
   }
 
-  async function openDrawer(assoc) {
-    setActiveAssociate({ ...assoc, cases: [] });
-    setShowDrawer(true);
-    try {
-      const qCases = query(collection(db, "cases"), where("assignedTo", "array-contains", assoc.id), orderBy("createdAt", "desc"), limit(10));
-      const snap = await getDocs(qCases);
-      const cs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setActiveAssociate(prev => ({ ...prev, cases: cs }));
-    } catch {/* ignore */}
-  }
+ async function openDrawer(assoc) {
+  setActiveAssociate({ ...assoc, cases: [] });
+  setShowDrawer(true);
+  try {
+    const qCases = query(
+      collection(db, "cases"), 
+      where("assignedTo", "array-contains", assoc.id), 
+      orderBy("createdAt", "desc"), 
+      limit(10)
+    );
+    const snap = await getDocs(qCases);
+    const cs = snap.docs.map(d => ({ 
+      id: d.id, 
+      ...d.data(),
+      // Ensure we have a display name for the case
+      displayName: d.data().caseTitle || d.data().title || `Case ${d.id}`
+    }));
+    setActiveAssociate(prev => ({ ...prev, cases: cs }));
+  } catch {/* ignore */}
+}
 
   /* ---------------- UI ---------------- */
   return (
@@ -620,21 +630,36 @@ export default function ManageAssociates() {
                 </div>
               </div>
 
-              <div>
-                <div className="text-xs text-gray-500">Assigned Cases</div>
-                <div className="mt-2 space-y-2">
-                  {(activeAssociate.cases && activeAssociate.cases.length) ? activeAssociate.cases.map(c => (
-                    <div key={c.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-md">
-                      <div className="font-medium">{c.title || `Case ${c.id}`}</div>
-                      <div className="text-xs text-gray-400">Status: {c.status || "—"} • {fmt(c.createdAt)}</div>
-                      <div className="mt-2 flex gap-2">
-                        <button onClick={() => unassignCaseFromAssociate(c.id, activeAssociate.id)} className="px-2 py-1 text-xs border rounded">Unassign</button>
-                        <Link to={`/cases/${c.id}`} className="px-2 py-1 text-xs border rounded">Open</Link>
-                      </div>
-                    </div>
-                  )) : <div className="text-sm text-gray-400">No assigned cases.</div>}
-                </div>
-              </div>
+             <div>
+  <div className="text-xs text-gray-500">Assigned Cases</div>
+  <div className="mt-2 space-y-2">
+    {(activeAssociate.cases && activeAssociate.cases.length) ? 
+      activeAssociate.cases.map(c => (
+        <div key={c.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-md">
+          {/* Make the case name a clickable link */}
+          <Link 
+            to={`/idcases/${c.id}`}
+            className="font-medium text-blue-600 hover:underline cursor-pointer"
+          >
+            {c.displayName}
+          </Link>
+          <div className="text-xs text-gray-400">
+            Status: {c.status || "—"} • {fmt(c.createdAt)}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button 
+              onClick={() => unassignCaseFromAssociate(c.id, activeAssociate.id)} 
+              className="px-2 py-1 text-xs border rounded"
+            >
+              Unassign
+            </button>
+          </div>
+        </div>
+      )) : 
+      <div className="text-sm text-gray-400">No assigned cases.</div>
+    }
+  </div>
+</div>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => openEdit(activeAssociate)} className="px-3 py-2 border rounded">Edit</button>

@@ -66,7 +66,16 @@ function sum(arr) {
   return arr.reduce((a, b) => a + (Number(b) || 0), 0);
 }
 function toJSDate(v) {
-  return v?.toDate?.() || (v ? new Date(v) : null);
+  if (!v) return null;
+  // Handle Firestore Timestamp
+  if (typeof v === 'object' && v.toDate) {
+    return v.toDate();
+  }
+  // Handle string dates (like "2025-08-16T06:14:46.429Z")
+  if (typeof v === 'string') {
+    return new Date(v);
+  }
+  return null;
 }
 function exportCSV(filename = "reports.csv", rows = []) {
   if (!rows.length) return;
@@ -85,17 +94,24 @@ function exportCSV(filename = "reports.csv", rows = []) {
   document.body.removeChild(a);
 }
 
-// Court name extraction function
+// Court name extraction function - improved to handle various data structures
 const getCourtName = (caseData, courtsData) => {
-  if (caseData.court) {
-    if (typeof caseData.court === 'string') return caseData.court;
-    if (typeof caseData.court === 'object') {
-      return caseData.court.name || caseData.court.courtName || caseData.court.title || 'No Court Assigned';
-    }
+  // First check if we have a direct court name
+  if (caseData.courtName) return caseData.courtName;
+  
+  // Check if we have a court object with a name property
+  if (caseData.court && typeof caseData.court === 'object') {
+    return caseData.court.name || caseData.court.courtName || 'No Court Assigned';
   }
   
+  // Check if we have a court ID to look up
   if (caseData.courtId && courtsData[caseData.courtId]) {
     return courtsData[caseData.courtId].name || 'No Court Assigned';
+  }
+  
+  // Check if we have a simple string court field
+  if (typeof caseData.court === 'string') {
+    return caseData.court;
   }
   
   return 'No Court Assigned';
@@ -121,6 +137,7 @@ export default function Reports() {
   const [clients, setClients] = useState([]);
   const [associates, setAssociates] = useState([]);
   const [courts, setCourts] = useState({});
+  const [allCases, setAllCases] = useState([]); // Store all cases for filtering
 
   // Print functionality
   const handlePrint = useReactToPrint({
@@ -156,20 +173,17 @@ export default function Reports() {
     return () => unsub();
   }, []);
 
-  // Fetch data
+  // Fetch all data
   useEffect(() => {
     if (!authReady || !roleChecked || !isOwner) return;
 
     setLoading(true);
     setErr("");
 
-    const s = new Date(startDate);
-    const e = new Date(endDate);
-    e.setHours(23, 59, 59, 999);
-
-    // Fetch courts first
-    const fetchCourts = async () => {
+    // Fetch all data first, then filter locally
+    const fetchAllData = async () => {
       try {
+        // Fetch courts
         const courtsSnapshot = await getDocs(collection(db, 'courts'));
         const courtsData = {};
         courtsSnapshot.forEach((doc) => {
@@ -177,98 +191,80 @@ export default function Reports() {
         });
         setCourts(courtsData);
         
-        // Now fetch other data
-        fetchOtherData(courtsData);
+        // Fetch cases
+        const casesSnapshot = await getDocs(collection(db, "cases"));
+        const casesData = casesSnapshot.docs.map((d) => {
+          const data = d.data();
+          return { 
+            id: d.id, 
+            ...data,
+            courtName: getCourtName(data, courtsData)
+          };
+        });
+        setAllCases(casesData);
+        
+        // Fetch clients
+        const clientsSnapshot = await getDocs(collection(db, "clients"));
+        setClients(clientsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        
+        // Fetch associates
+        const associatesSnapshot = await getDocs(
+          query(collection(db, "Users"), where("role", "==", "associate"))
+        );
+        setAssociates(associatesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+        
+        setLoading(false);
       } catch (error) {
-        console.error('Error fetching courts:', error);
-        setErr('Failed to load courts data');
+        console.error('Error fetching data:', error);
+        setErr('Failed to load data: ' + error.message);
         setLoading(false);
       }
     };
 
-    const fetchOtherData = (courtsData) => {
-      // Cases in date range
-      const qCases = query(
-        collection(db, "cases"),
-        where("createdAt", ">=", s),
-        where("createdAt", "<=", e),
-        orderBy("createdAt", "asc")
-      );
+    fetchAllData();
+  }, [authReady, roleChecked, isOwner]);
 
-      // Clients
-      const qClients = query(collection(db, "clients"));
-
-      // Associates
-      const qAssociates = query(collection(db, "Users"), where("role", "==", "associate"));
-
-      const unsubCases = onSnapshot(
-        qCases,
-        (snap) => {
-          const casesData = snap.docs.map((d) => {
-            const data = d.data();
-            return { 
-              id: d.id, 
-              ...data,
-              courtName: getCourtName(data, courtsData)
-            };
-          });
-          setCases(casesData);
-        },
-        (e2) => {
-          console.error(e2);
-          setErr(e2.message || "Failed to load cases");
-        }
-      );
-
-      const unsubClients = onSnapshot(
-        qClients,
-        (snap) => setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-        (e2) => {
-          console.error(e2);
-          setErr((prev) => prev || e2.message || "Failed to load clients");
-        }
-      );
-
-      const unsubUsers = onSnapshot(
-        qAssociates,
-        (snap) => {
-          setAssociates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          setLoading(false);
-        },
-        (e2) => {
-          console.error(e2);
-          setErr((prev) => prev || e2.message || "Failed to load associates");
-          setLoading(false);
-        }
-      );
-
-      return () => {
-        unsubCases();
-        unsubClients();
-        unsubUsers();
-      };
-    };
-
-    fetchCourts();
-  }, [authReady, roleChecked, isOwner, startDate, endDate]);
+  // Filter cases based on date range
+  useEffect(() => {
+    if (allCases.length === 0) return;
+    
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    e.setHours(23, 59, 59, 999);
+    
+    const filteredCases = allCases.filter(c => {
+      const caseDate = toJSDate(c.createdAt);
+      return caseDate && caseDate >= s && caseDate <= e;
+    });
+    
+    setCases(filteredCases);
+  }, [allCases, startDate, endDate]);
 
   // Derived metrics
   const totalCases = cases.length;
-  const closedCases = cases.filter((c) => c.status === "closed" || c.status === "Closed").length;
-  const pendingCases = cases.filter((c) => c.status === "pending" || c.status === "Pending").length;
-  const activeCases = cases.filter((c) => c.status === "active" || c.status === "Active").length;
-  const urgentCases = cases.filter((c) => c.priority === "urgent" || c.priority === "Urgent").length;
+  const closedCases = cases.filter((c) => 
+    c.status && (c.status.toLowerCase() === "closed" || c.status.toLowerCase() === "completed")
+  ).length;
+  const pendingCases = cases.filter((c) => 
+    c.status && (c.status.toLowerCase() === "pending" || c.status.toLowerCase() === "new")
+  ).length;
+  const activeCases = cases.filter((c) => 
+    c.status && (c.status.toLowerCase() === "active" || c.status.toLowerCase() === "in progress")
+  ).length;
+  const urgentCases = cases.filter((c) => 
+    c.priority && (c.priority.toLowerCase() === "urgent" || c.priority.toLowerCase() === "high")
+  ).length;
 
-  // Financial overview
-  const totalFees = sum(cases.map((c) => parseFloat(c.caseValue) || 0));
-  const receivedPayments = sum(cases.map((c) => parseFloat(c.paymentReceived) || 0));
+  // Financial overview - with better fallbacks for missing data
+  const totalFees = sum(cases.map((c) => parseFloat(c.caseValue || c.value || 0) || 0));
+  const receivedPayments = sum(cases.map((c) => parseFloat(c.paymentReceived || c.paidAmount || 0) || 0));
   const outstandingBalance = Math.max(0, totalFees - receivedPayments);
 
   // Case type distribution
   const caseTypeData = useMemo(() => {
     const types = {};
     cases.forEach((c) => {
-      const type = c.caseType || "Unknown";
+      const type = c.caseType || c.type || "Unknown";
       types[type] = (types[type] || 0) + 1;
     });
     return Object.entries(types).map(([name, value]) => ({ name, value }));
@@ -299,7 +295,7 @@ export default function Reports() {
           };
         }
         months[monthYear].cases += 1;
-        months[monthYear].revenue += parseFloat(c.caseValue) || 0;
+        months[monthYear].revenue += parseFloat(c.caseValue || 0) || 0;
       }
     });
     return Object.values(months);
@@ -328,7 +324,7 @@ export default function Reports() {
             performance[uid] = { cases: 0, revenue: 0 };
           }
           performance[uid].cases += 1;
-          performance[uid].revenue += parseFloat(c.caseValue) || 0;
+          performance[uid].revenue += parseFloat(c.caseValue || 0) || 0;
         });
       }
     });
@@ -350,12 +346,11 @@ export default function Reports() {
   // Export functions
   const exportCaseDataCSV = () => {
     const rows = cases.map(c => ({
-      'Case Number': c.caseNumber,
-      'Title': c.caseTitle,
+      'Case Title': c.caseTitle || c.title,
       'Court': c.courtName,
       'Status': c.status,
-      'Type': c.caseType,
-      'Value': c.caseValue,
+      'Type': c.caseType || c.type,
+      'Value': c.caseValue || c.value,
       'Created': c.createdAt ? toJSDate(c.createdAt).toLocaleDateString() : 'N/A'
     }));
     exportCSV(`cases_${startDate}_to_${endDate}.csv`, rows);
@@ -447,6 +442,16 @@ export default function Reports() {
           </div>
         </div>
       )}
+
+      {/* Data summary */}
+      <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <p className="text-sm text-blue-800 dark:text-blue-200">
+          Showing <strong>{cases.length}</strong> cases from <strong>{startDate}</strong> to <strong>{endDate}</strong>
+          {allCases.length > 0 && (
+            <span> (out of {allCases.length} total cases)</span>
+          )}
+        </p>
+      </div>
 
       {/* Printable content */}
       <div ref={printRef} className="space-y-6">
@@ -557,7 +562,7 @@ export default function Reports() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`${value}`, value === parseInt(value) ? 'Cases' : 'Revenue']} />
+                  <Tooltip formatter={(value, name) => [name === 'cases' ? `${value} cases` : `₹ ${value}`, name === 'cases' ? 'Cases' : 'Revenue']} />
                   <Legend />
                   <Bar dataKey="cases" name="Cases" fill="#3B82F6" />
                   <Bar dataKey="revenue" name="Revenue (₹)" fill="#10B981" />
