@@ -31,7 +31,9 @@ const LegalCalendar = () => {
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const daysOfWeek = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // Helper function to parse hearingDate
+  // ----------------------------
+  // Helper: parse hearing date(s)
+  // ----------------------------
   const parseHearingDate = (docData) => {
     const dates = [];
     
@@ -65,36 +67,138 @@ const LegalCalendar = () => {
     return dates;
   };
 
-  // Helper function to parse adjournment history
+  // ---------------------------------------------------------------
+  // Robust parser for adjournment history -> adjourned-from events
+  // ---------------------------------------------------------------
   const parseAdjournmentDates = (docData) => {
     const dates = [];
-    
+
+    // If there's no meaningful data, return early
+    if (!docData) return dates;
+
+    // 1) Build a normalized set of hearing dates (from hearingDate, hearingDates, and adjournHistory.to's)
+    const hearingTsSet = new Set();
+
+    // Add hearing events parsed by parseHearingDate()
+    const parsedHearings = parseHearingDate(docData);
+    parsedHearings.forEach(h => {
+      if (h.date && !isNaN(h.date.getTime())) hearingTsSet.add(h.date.getTime());
+    });
+
+    // Also look into adjournHistory entries' to/toDate/newDate (they can represent new hearing)
     if (Array.isArray(docData.adjournHistory)) {
-      docData.adjournHistory.forEach(adjourn => {
-        if (adjourn.date) {
-          const date = new Date(adjourn.date);
-          if (!isNaN(date.getTime())) {
+      docData.adjournHistory.forEach(adj => {
+        const rawTo = adj.toDate || adj.to || adj.newDate || null;
+        const rawFrom = adj.date || adj.from || null;
+        if (rawTo) {
+          const parsedTo = new Date(rawTo);
+          if (!isNaN(parsedTo.getTime())) hearingTsSet.add(parsedTo.getTime());
+        }
+        // sometimes adjournHistory stores original hearing in .date — include it as hearing candidate too
+        if (rawFrom) {
+          const parsedFrom = new Date(rawFrom);
+          if (!isNaN(parsedFrom.getTime())) hearingTsSet.add(parsedFrom.getTime());
+        }
+      });
+    }
+
+    // Convert to sorted array of Date objects
+    const hearingDates = Array.from(hearingTsSet).map(t => new Date(Number(t))).sort((a, b) => a - b);
+
+    // 2) If we have an ordered list of hearing dates (older -> newer), create adjourned-from events
+    //    for each consecutive pair (previous => next).
+    if (hearingDates.length >= 2) {
+      for (let i = 0; i < hearingDates.length - 1; i++) {
+        const from = hearingDates[i];
+        const to = hearingDates[i + 1];
+
+        // Only create if they are different calendar moments
+        if (from.getTime() === to.getTime()) continue;
+
+        // Find reason in adjournHistory by matching from or to where possible
+        let reason = '';
+        if (Array.isArray(docData.adjournHistory)) {
+          const match = docData.adjournHistory.find(adj => {
+            const rawAdjFrom = adj.date || adj.from || null;
+            const rawAdjTo = adj.toDate || adj.to || adj.newDate || null;
+            const parsedAdjFrom = rawAdjFrom ? new Date(rawAdjFrom) : null;
+            const parsedAdjTo = rawAdjTo ? new Date(rawAdjTo) : null;
+            const fromMatch = parsedAdjFrom && !isNaN(parsedAdjFrom.getTime()) && parsedAdjFrom.getTime() === from.getTime();
+            const toMatch = parsedAdjTo && !isNaN(parsedAdjTo.getTime()) && parsedAdjTo.getTime() === to.getTime();
+            return fromMatch || toMatch;
+          });
+          if (match) reason = match.reason || match.notes || '';
+        }
+
+        dates.push({
+          date: from,
+          type: 'adjourned-from',
+          caseData: docData,
+          reason,
+          toDate: to
+        });
+      }
+    }
+
+    // 3) Also, ensure we catch standalone adjournHistory items where a clear 'from' is provided
+    //    (and wasn't already added above). This handles cases where hearingDates did not include the original.
+    if (Array.isArray(docData.adjournHistory)) {
+      docData.adjournHistory.forEach(adj => {
+        const rawFrom = adj.date || adj.from || null;
+        const rawTo = adj.toDate || adj.to || adj.newDate || null;
+
+        const parsedFrom = rawFrom ? new Date(rawFrom) : null;
+        const parsedTo = rawTo ? new Date(rawTo) : null;
+
+        if (parsedFrom && !isNaN(parsedFrom.getTime())) {
+          // skip if we already included this from-date
+          const exists = dates.some(ev => ev.date && ev.date.getTime() === parsedFrom.getTime() && ev.caseData && ev.caseData.id === docData.id);
+          if (exists) return;
+
+          // determine toDate fallback: explicit parsedTo OR docData.hearingDate (if different)
+          let toDate = null;
+          if (parsedTo && !isNaN(parsedTo.getTime())) {
+            toDate = parsedTo;
+          } else if (docData.hearingDate) {
+            const parsedHd = new Date(docData.hearingDate);
+            if (!isNaN(parsedHd.getTime())) toDate = parsedHd;
+          }
+
+          // only push adjourned-from if it's meaningfully different from toDate
+          if (!toDate || toDate.getTime() !== parsedFrom.getTime()) {
             dates.push({
-              date, 
-              type: 'adjournment', 
+              date: parsedFrom,
+              type: 'adjourned-from',
               caseData: docData,
-              reason: adjourn.reason
+              reason: adj.reason || adj.notes || '',
+              toDate
             });
           }
         }
       });
     }
-    
-    return dates;
+
+    // Final: return unique adjourned-from events (by timestamp + case id)
+    const unique = [];
+    const seen = new Set();
+    dates.forEach(ev => {
+      const key = `${ev.caseData?.id || ev.caseData?.caseNo || JSON.stringify(ev.caseData)}::${ev.date.getTime()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(ev);
+      }
+    });
+
+    return unique;
   };
 
-  // Filter events by type
+  // Filter events by caseType
   const filterEventsByType = (events) => {
     if (selectedCaseType === 'All') return events;
-    return events.filter(event => event.caseData.caseType === selectedCaseType);
+    return events.filter(event => event.caseData && event.caseData.caseType === selectedCaseType);
   };
 
-  // Fetch user role on component mount
+  // Fetch user role on mount
   useEffect(() => {
     const fetchUserRole = async () => {
       const user = auth.currentUser;
@@ -124,7 +228,7 @@ const LegalCalendar = () => {
     fetchUserRole();
   }, []);
 
-  // Fetch cases based on user role
+  // Fetch cases and build events
   useEffect(() => {
     if (!userRole || !currentUser) return;
     
@@ -145,8 +249,8 @@ const LegalCalendar = () => {
         const allCases = [];
         const caseTypes = new Set(['All']);
         
-        snapshot.forEach(doc => {
-          const data = { id: doc.id, ...doc.data() };
+        snapshot.forEach(docSnap => {
+          const data = { id: docSnap.id, ...docSnap.data() };
           
           // Skip cases not assigned to user (if user role)
           if (userRole === 'user' && 
@@ -165,15 +269,16 @@ const LegalCalendar = () => {
           // Parse hearing dates
           const hearingDates = parseHearingDate(caseDoc);
           
-          // Parse adjournment dates
+          // Parse adjournment dates (produces adjourned-from entries)
           const adjournmentDates = parseAdjournmentDates(caseDoc);
           
-          // Combine all events
+          // Combine all events (hearing + adjourned-from). Do NOT convert adjourned-from to hearings.
           const allEvents = [...hearingDates, ...adjournmentDates];
-          
+
           allEvents.forEach(event => {
             if (!event.date) return;
             
+            // Only include events that fall in the currently selected month/year
             if (event.date.getFullYear() === currentDate.getFullYear() && 
                 event.date.getMonth() === currentDate.getMonth()) {
               
@@ -198,7 +303,7 @@ const LegalCalendar = () => {
     fetchAndFilterCases();
   }, [currentDate, userRole, currentUser]);
 
-  // Calendar helper functions
+  // Calendar helpers
   const getDaysInMonth = date => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = date => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 
@@ -223,6 +328,7 @@ const LegalCalendar = () => {
     }
   };
 
+  // Render days (with adjourned-from badge on original date)
   const renderCalendarDays = () => {
     const daysInMonth = getDaysInMonth(currentDate);
     const firstDay = getFirstDayOfMonth(currentDate);
@@ -237,7 +343,7 @@ const LegalCalendar = () => {
       const filteredEvents = filterEventsByType(dayEvents);
       
       const hearings = filteredEvents.filter(e => e.type === 'hearing');
-      const adjournments = filteredEvents.filter(e => e.type === 'adjournment');
+      const adjournmentsFrom = filteredEvents.filter(e => e.type === 'adjourned-from');
       const totalEvents = filteredEvents.length;
       
       const isToday = (
@@ -269,13 +375,28 @@ const LegalCalendar = () => {
                 </div>
               )}
               
-              {adjournments.length > 0 && (
-                <div className="inline-flex items-center text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
-                  <Clock className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
-                  {adjournments.length} Adjournment{adjournments.length !== 1 ? 's' : ''}
-                </div>
-              )}
-              
+              {adjournmentsFrom.length > 0 && adjournmentsFrom.map((a, idx) => {
+                // show detailed badge for single adjourned-from; if many, show count
+                if (adjournmentsFrom.length === 1) {
+                  const toDateStr = a.toDate 
+                    ? a.toDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'TBD';
+                  return (
+                    <div key={`adj-from-${idx}`} title={a.reason || ''} className="inline-flex items-center text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                      <Clock className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
+                      Adjourned → {toDateStr}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div key={`adj-from-count-${idx}`} className="inline-flex items-center text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                      <Clock className="w-2.5 h-2.5 md:w-3 md:h-3 mr-1" />
+                      {adjournmentsFrom.length} Adjournments
+                    </div>
+                  );
+                }
+              })}
+
               <div className="text-xs text-gray-600 leading-tight hidden md:block">
                 {filteredEvents.slice(0, 2).map(event => event.caseData.caseType).join(', ')}
                 {filteredEvents.length > 2 && '...'}
@@ -483,7 +604,7 @@ const LegalCalendar = () => {
             </div>
             <div className="flex items-center text-xs md:text-sm text-gray-600">
               <Clock className="w-3 h-3 mr-2 text-amber-600" />
-              Adjournments
+              Adjournments (original dates)
             </div>
           </div>
           

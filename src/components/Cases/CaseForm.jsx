@@ -215,7 +215,7 @@ export default function CaseForm() {
       'caseNumber', 
       'caseTitle', 
       'partyName', 
-      'adjournDate', 
+      
       'hearingDate', 
       'underSection', 
       'onBehalfOf',
