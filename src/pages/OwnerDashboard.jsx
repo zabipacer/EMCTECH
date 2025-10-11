@@ -1,3 +1,4 @@
+// pages/OwnerDashboard.jsx
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,9 +19,12 @@ import {
   FaChartBar,
   FaBuilding,
   FaWarehouse,
-  FaFlag
+  FaFlag,
+  FaUserCheck
 } from "react-icons/fa";
 import { FaGear } from "react-icons/fa6";
+import { useLayout } from "../components/Layout/AppLayout";
+import { useAuth } from "../contexts/AuthContext";
 
 // Mock data aligned with our business needs
 const mockData = {
@@ -126,13 +130,13 @@ const mockData = {
       description: "Bulk import products"
     },
     {
-  id: 5,
-  title: "Sync Websites",
-  path: "/automation",
-  icon: FaSync,
-  color: "bg-indigo-600 hover:bg-indigo-700",
-  description: "Sync to company websites"
-},
+      id: 5,
+      title: "Sync Websites",
+      path: "/automation",
+      icon: FaSync,
+      color: "bg-indigo-600 hover:bg-indigo-700",
+      description: "Sync to company websites"
+    },
     { 
       id: 6, 
       title: "View Reports", 
@@ -141,24 +145,29 @@ const mockData = {
       color: "bg-red-600 hover:bg-red-700",
       description: "View business analytics"
     },
-        {
-  id: 7,
-  title: "Analytics",
-  path: "/analytics",
-  icon: FaFlag,
-  color: "bg-indigo-600 hover:bg-indigo-700",
-  description: "Sync to company websites"
-},
-        {
-  id: 8,
-  title: "Settings",
-  path: "/settings",
-  icon: FaGear,
-  color: "bg-indigo-600 hover:bg-indigo-700",
-  description: "Sync to company websites"
-},
-   
-
+    {
+      id: 7,
+      title: "Analytics",
+      path: "/analytics",
+      icon: FaFlag,
+      color: "bg-indigo-600 hover:bg-indigo-700",
+      description: "Sync to company websites"
+    },
+    {
+      id: 8,
+      title: "Settings",
+      path: "/settings",
+      icon: FaGear,
+      color: "bg-indigo-600 hover:bg-indigo-700",
+      description: "Sync to company websites"
+    },{
+  id: 9,
+  title: "User Approvals",
+  path: "/user-approvals",
+  icon: FaUserCheck, // You'll need to import this
+  color: "bg-teal-600 hover:bg-teal-700",
+  description: "Approve or reject user requests"
+}
   ],
   pendingAlerts: [
     {
@@ -208,7 +217,7 @@ const mockData = {
       bgColor: "bg-red-50",
       borderColor: "border-red-200",
       path: "/proposals"
-    }
+    },
   ]
 };
 
@@ -364,11 +373,17 @@ const CompanySwitcher = ({ currentCompany, onCompanyChange }) => {
   );
 };
 
-const Dashboard = () => {
+export default function OwnerDashboard() {
+  const { setTitle } = useLayout();
+  const { userProfile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [activities, setActivities] = useState([]);
   const [stats, setStats] = useState({});
   const [currentCompany, setCurrentCompany] = useState('both');
+
+  useEffect(() => {
+    setTitle("Owner Dashboard");
+  }, [setTitle]);
 
   useEffect(() => {
     // Simulate API call
@@ -422,7 +437,7 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <motion.header 
         className="flex justify-between items-center"
@@ -431,9 +446,11 @@ const Dashboard = () => {
         transition={{ duration: 0.5 }}
       >
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-4xl font-bold text-gray-900">
+            Welcome back, {userProfile?.firstName || 'Owner'}!
+          </h1>
           <p className="text-gray-600 mt-2">
-            Welcome back! Managing {currentCompany === 'both' ? 'both companies' : currentCompany}
+            Here's what's happening with your business today. Managing {currentCompany === 'both' ? 'both companies' : currentCompany}
           </p>
         </div>
         
@@ -483,7 +500,7 @@ const Dashboard = () => {
               <span className="text-gray-500 text-sm">Frequently used actions</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {mockData.quickActions.map((action) => (
                 <QuickActionButton key={action.id} action={action} />
               ))}
@@ -542,6 +559,4 @@ const Dashboard = () => {
       </div>
     </div>
   );
-};
-
-export default Dashboard;
+}

@@ -1,21 +1,22 @@
-import React, { useState } from "react";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth, db } from "../firebase/firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+// src/Authenication/Login.jsx
+import React, { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase/firebase';
+import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
     if (!email || !password) {
-      toast.error("Please enter email and password.", {
-        position: "bottom-center",
+      toast.error('Please enter email and password.', { 
+        position: 'bottom-center' 
       });
       return;
     }
@@ -23,51 +24,50 @@ function Login() {
     setIsLoading(true);
 
     try {
-      // 1️⃣ sign in with Firebase Auth
-      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      // Just sign in - AuthContext will handle the rest
+      await signInWithEmailAndPassword(auth, email, password);
+      
+      // Show success message
+      toast.success('Logged in successfully!', { 
+        position: 'top-center',
+        autoClose: 2000
+      });
 
-      // 2️⃣ fetch their Firestore record
-      const userSnap = await getDoc(doc(db, "Users", user.uid));
-      if (!userSnap.exists()) {
-        toast.error("User record not found.", { position: "bottom-center" });
-        await signOut(auth);
-        setIsLoading(false);
-        return;
-      }
-      const data = userSnap.data();
+      // Navigation will be handled by AuthContext and route protection
+      // Don't navigate here - let the AuthContext update trigger the redirect
 
-      // 3️⃣ only allow if:
-      //   • they're an owner (pre-created), or
-      //   • their approved flag is true
-      if (data.role !== "store_owner" && !data.approved) {
-        toast.error("Account not approved yet.", { position: "bottom-center" });
-        await signOut(auth);
-        setIsLoading(false);
-        return;
-      }
-
-      // 4️⃣ success → redirect based on role
-      toast.success("Logged in successfully!", { position: "top-center" });
-      if (data.role === "store_owner") {
-        navigate("/owner-dashboard");
-      } else {
-        navigate("/user-dashboard");
-      }
     } catch (error) {
-      console.error("Login error:", error.message);
-      const msg = error.message.includes("user-not-found")
-        ? "No account with this email."
-        : error.message.includes("wrong-password")
-        ? "Incorrect password."
-        : "Login failed.";
-      toast.error(msg, { position: "bottom-center" });
+      console.error('Login error:', error);
+      
+      // Handle specific Firebase auth errors
+      let errorMessage = 'Login failed. Please try again.';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address format.';
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = 'Invalid email or password.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed attempts. Please try again later.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your connection.';
+      }
+      
+      toast.error(errorMessage, { position: 'bottom-center' });
+    } finally {
       setIsLoading(false);
     }
   };
 
+  // ... (keep your existing JSX, it's fine)
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative">
-      {/* Subtle background decoration */}
+      {/* Your existing beautiful JSX */}
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative">
+      {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-20 left-20 w-32 h-32 bg-blue-500/10 rounded-full opacity-50"></div>
         <div className="absolute bottom-20 right-20 w-40 h-40 bg-indigo-500/10 rounded-full opacity-30"></div>
@@ -139,7 +139,7 @@ function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none relative overflow-hidden"
+              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {isLoading ? (
                 <div className="flex items-center justify-center">
@@ -152,7 +152,7 @@ function Login() {
               ) : (
                 <>
                   <span>Sign In</span>
-                  <svg className="inline-block w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="inline-block w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
                   </svg>
                 </>
@@ -189,6 +189,7 @@ function Login() {
           <p className="text-gray-500 text-sm">Secure login powered by Firebase</p>
         </div>
       </div>
+    </div>
     </div>
   );
 }
