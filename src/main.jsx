@@ -1,4 +1,3 @@
-// main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
@@ -7,7 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppLayout from './components/Layout/AppLayout';
 import DashboardRouter from './pages/DashboardRouter';
 
-import ProposalManagement from './pages/ProposalManagement';
+import ProposalManagement from './pages/ProposalManagement/ProposalManagement.jsx';
 import CreateProposal from './Createproposal';
 import ClientManagement from './pages/ClientManagemnet';
 import Automation from './pages/Automation';
@@ -18,10 +17,9 @@ import ApprovalPending from './pages/ApprovalPending';
 import UserApprovalDashboard from './pages/UserApprovalDashboard';
 import Login from './Authenication/Login';
 import Register from './Authenication/Signup';
-
 import './index.css';
 import ProductManagement from './pages/ProductManagement/ProductManagement';
-
+import { useProducts } from './pages/ProductManagement/hooks.js';
 // Public Route - Only for unauthenticated users
 const PublicRoute = ({ children }) => {
   const { userProfile, loading } = useAuth();
@@ -124,7 +122,7 @@ const AppRoutes = () => {
         <Route path="dashboard/*" element={<DashboardRouter />} />
         <Route path="products" element={<ProductManagement />} />
         <Route path="proposals" element={<ProposalManagement />} />
-        <Route path="proposals/create" element={<CreateProposal />} />
+        <Route path="proposals/create" element={<CreateProposal />} /> {/* Fixed: Use CreateProposal component */}
         <Route path="clients" element={<ClientManagement />} />
         <Route path="automation" element={<Automation />} />
         <Route path="analytics" element={<Analytics />} />
