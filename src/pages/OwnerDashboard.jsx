@@ -9,18 +9,15 @@ import {
   FaDollarSign,
   FaPlusCircle, 
   FaArrowRight,
-  FaSearch,
-  FaBell,
-  FaUserCircle,
   FaChartLine,
-  FaExclamationTriangle,
   FaSync,
   FaFileExcel,
   FaChartBar,
   FaBuilding,
   FaWarehouse,
   FaFlag,
-  FaUserCheck
+  FaUserCheck,
+  FaBars
 } from "react-icons/fa";
 import { FaGear } from "react-icons/fa6";
 import { useLayout } from "../components/Layout/AppLayout";
@@ -164,7 +161,7 @@ const mockData = {
   id: 9,
   title: "User Approvals",
   path: "/user-approvals",
-  icon: FaUserCheck, // You'll need to import this
+  icon: FaUserCheck,
   color: "bg-teal-600 hover:bg-teal-700",
   description: "Approve or reject user requests"
 }
@@ -228,35 +225,35 @@ const StatCard = ({ title, count, trend, pending, description, icon: Icon, link,
 
   const CardContent = () => (
     <motion.div
-      className={`${color} shadow-xl rounded-2xl p-6 flex flex-col justify-between text-white relative overflow-hidden group cursor-pointer h-48`}
+      className={`${color} shadow-xl rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6 flex flex-col justify-between text-white relative overflow-hidden group cursor-pointer h-32 sm:h-36 lg:h-48`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
       whileHover={{ scale: 1.02, y: -5 }}
     >
       {/* Background decoration */}
-      <div className="absolute -right-6 -top-6 opacity-10 transform rotate-12">
-        <Icon className="text-9xl" />
+      <div className="absolute -right-3 -top-3 sm:-right-4 sm:-top-4 lg:-right-6 lg:-top-6 opacity-10 transform rotate-12">
+        <Icon className="text-5xl sm:text-6xl lg:text-9xl" />
       </div>
       
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start mb-2 sm:mb-3 lg:mb-4">
         <div className="flex-1">
-          <h2 className="font-semibold text-lg mb-2">{title}</h2>
-          <p className="text-3xl font-bold mb-2">{count}</p>
-          <p className="text-white text-opacity-80 text-sm mb-3">{description}</p>
-          <div className="flex items-center justify-between">
-            <span className={`text-sm ${trendColor}`}>
+          <h2 className="font-semibold text-xs sm:text-sm lg:text-lg mb-1 lg:mb-2">{title}</h2>
+          <p className="text-lg sm:text-xl lg:text-3xl font-bold mb-1 lg:mb-2">{count}</p>
+          <p className="text-white text-opacity-80 text-xs mb-2 lg:mb-3 line-clamp-2">{description}</p>
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className={`text-xs ${trendColor}`}>
               {trendText} from last month
             </span>
             {pending && (
-              <span className="bg-white bg-opacity-20 text-xs px-3 py-1 rounded-full">
+              <span className="bg-white bg-opacity-20 text-xs px-2 py-1 rounded-full whitespace-nowrap">
                 {isRevenue ? pending : `${pending} pending`}
               </span>
             )}
           </div>
         </div>
-        <div className="bg-white bg-opacity-20 p-3 rounded-full ml-4">
-          <Icon className="text-2xl" />
+        <div className="bg-white bg-opacity-20 p-1 sm:p-2 lg:p-3 rounded-full ml-2 lg:ml-4 flex-shrink-0">
+          <Icon className="text-sm sm:text-base lg:text-2xl" />
         </div>
       </div>
     </motion.div>
@@ -276,20 +273,20 @@ const ActivityItem = ({ activity }) => {
   
   return (
     <motion.li 
-      className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer group border-b border-gray-100 last:border-b-0"
+      className="flex items-center justify-between p-2 sm:p-3 lg:p-4 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer group border-b border-gray-100 last:border-b-0"
       whileHover={{ x: 5 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="flex items-center space-x-4 flex-1">
-        <div className={`p-3 rounded-full bg-gray-100 ${activity.color}`}>
-          <Icon className="text-lg" />
+      <div className="flex items-center space-x-2 sm:space-x-3 lg:space-x-4 flex-1 min-w-0">
+        <div className={`p-1 sm:p-2 lg:p-3 rounded-full bg-gray-100 ${activity.color} flex-shrink-0`}>
+          <Icon className="text-xs sm:text-sm lg:text-lg" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-gray-800 font-medium truncate">{activity.message}</p>
-          <p className="text-gray-500 text-sm">{activity.time}</p>
+          <p className="text-gray-800 font-medium text-xs sm:text-sm lg:text-base truncate">{activity.message}</p>
+          <p className="text-gray-500 text-xs lg:text-sm">{activity.time}</p>
         </div>
       </div>
-      <FaArrowRight className="text-gray-300 group-hover:text-gray-500 transform group-hover:translate-x-1 transition-all flex-shrink-0" />
+      <FaArrowRight className="text-gray-300 group-hover:text-gray-500 transform group-hover:translate-x-1 transition-all flex-shrink-0 text-xs sm:text-sm lg:text-base" />
     </motion.li>
   );
 };
@@ -300,16 +297,16 @@ const QuickActionButton = ({ action }) => {
   return (
     <Link to={action.path}>
       <motion.div
-        className={`${action.color} text-white p-4 rounded-xl flex flex-col space-y-3 shadow-lg h-full group`}
+        className={`${action.color} text-white p-2 sm:p-3 lg:p-4 rounded-lg sm:rounded-xl flex flex-col space-y-1 sm:space-y-2 lg:space-y-3 shadow-lg h-full group min-h-[70px] sm:min-h-[80px]`}
         whileHover={{ scale: 1.05, y: -2 }}
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
       >
-        <div className="flex items-center space-x-3">
-          <Icon className="text-xl" />
-          <span className="font-medium text-sm">{action.title}</span>
+        <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-3">
+          <Icon className="text-sm sm:text-base lg:text-xl" />
+          <span className="font-medium text-xs sm:text-sm lg:text-sm">{action.title}</span>
         </div>
-        <p className="text-white text-opacity-80 text-xs">{action.description}</p>
+        <p className="text-white text-opacity-80 text-xs line-clamp-2">{action.description}</p>
       </motion.div>
     </Link>
   );
@@ -321,54 +318,101 @@ const AlertCard = ({ alert }) => {
   return (
     <Link to={alert.path}>
       <motion.div 
-        className={`${alert.bgColor} border ${alert.borderColor} rounded-lg p-4 hover:shadow-md transition-all cursor-pointer group`}
+        className={`${alert.bgColor} border ${alert.borderColor} rounded-lg p-2 sm:p-3 lg:p-4 hover:shadow-md transition-all cursor-pointer group`}
         whileHover={{ scale: 1.02 }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-full ${alert.bgColor}`}>
-              <Icon className={`text-lg ${alert.color}`} />
+        <div className="flex items-center justify-between mb-1 sm:mb-2">
+          <div className="flex items-center space-x-1 sm:space-x-2 lg:space-x-3">
+            <div className={`p-1 sm:p-2 rounded-full ${alert.bgColor} flex-shrink-0`}>
+              <Icon className={`text-sm sm:text-base lg:text-lg ${alert.color}`} />
             </div>
-            <span className={`font-semibold text-sm ${alert.color}`}>{alert.title}</span>
+            <span className={`font-semibold text-xs sm:text-sm lg:text-sm ${alert.color} line-clamp-1`}>{alert.title}</span>
           </div>
-          <span className="bg-white px-2 py-1 rounded-full text-xs font-bold text-gray-700">
+          <span className="bg-white px-2 py-1 rounded-full text-xs font-bold text-gray-700 flex-shrink-0 ml-1 sm:ml-2">
             {alert.count}
           </span>
         </div>
-        <p className="text-gray-600 text-sm">{alert.message}</p>
+        <p className="text-gray-600 text-xs sm:text-sm lg:text-sm line-clamp-2">{alert.message}</p>
       </motion.div>
     </Link>
   );
 };
 
 const CompanySwitcher = ({ currentCompany, onCompanyChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const companies = [
     { id: 'both', name: 'Both Companies', icon: FaBuilding },
     { id: 'innova', name: 'Innovamechanics', icon: FaBuilding },
     { id: 'emctech', name: 'Emctech', icon: FaBuilding }
   ];
 
+  const currentCompanyObj = companies.find(company => company.id === currentCompany);
+
   return (
-    <div className="flex items-center space-x-2 bg-white rounded-lg border border-gray-300 p-1">
-      {companies.map((company) => {
-        const Icon = company.icon;
-        const isActive = currentCompany === company.id;
+    <div className="relative">
+      {/* Mobile Dropdown */}
+      <div className="block lg:hidden">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 w-full justify-between text-sm"
+        >
+          <div className="flex items-center space-x-2">
+            <FaBuilding className="text-xs" />
+            <span className="font-medium truncate">{currentCompanyObj?.name}</span>
+          </div>
+          <FaBars className="text-xs" />
+        </button>
         
-        return (
-          <button
-            key={company.id}
-            onClick={() => onCompanyChange(company.id)}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
-              isActive 
-                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-            }`}
-          >
-            <Icon className="text-xs" />
-            <span>{company.name}</span>
-          </button>
-        );
-      })}
+        {isOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10">
+            {companies.map((company) => {
+              const Icon = company.icon;
+              const isActive = currentCompany === company.id;
+              
+              return (
+                <button
+                  key={company.id}
+                  onClick={() => {
+                    onCompanyChange(company.id);
+                    setIsOpen(false);
+                  }}
+                  className={`flex items-center space-x-2 px-3 py-2 text-sm w-full text-left ${
+                    isActive 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                  } ${company.id !== companies[0].id ? 'border-t border-gray-200' : ''}`}
+                >
+                  <Icon className="text-xs" />
+                  <span>{company.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop View */}
+      <div className="hidden lg:flex items-center space-x-2 bg-white rounded-lg border border-gray-300 p-1">
+        {companies.map((company) => {
+          const Icon = company.icon;
+          const isActive = currentCompany === company.id;
+          
+          return (
+            <button
+              key={company.id}
+              onClick={() => onCompanyChange(company.id)}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                isActive 
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+              }`}
+            >
+              <Icon className="text-xs" />
+              <span>{company.name}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -376,7 +420,6 @@ const CompanySwitcher = ({ currentCompany, onCompanyChange }) => {
 export default function OwnerDashboard() {
   const { setTitle } = useLayout();
   const { userProfile } = useAuth();
-  const [searchTerm, setSearchTerm] = useState("");
   const [activities, setActivities] = useState([]);
   const [stats, setStats] = useState({});
   const [currentCompany, setCurrentCompany] = useState('both');
@@ -437,24 +480,24 @@ export default function OwnerDashboard() {
   ];
 
   return (
-    <div className="space-y-8 p-6 bg-gray-50 min-h-screen">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 p-2 sm:p-4 lg:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <motion.header 
-        className="flex justify-between items-center"
+        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 sm:gap-4"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold text-gray-900 truncate">
             Welcome back, {userProfile?.firstName || 'Owner'}!
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">
             Here's what's happening with your business today. Managing {currentCompany === 'both' ? 'both companies' : currentCompany}
           </p>
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3 w-full lg:w-auto mt-2 lg:mt-0">
           <CompanySwitcher 
             currentCompany={currentCompany}
             onCompanyChange={setCurrentCompany}
@@ -464,18 +507,18 @@ export default function OwnerDashboard() {
 
       {/* Stats Overview Section */}
       <section>
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Business Overview</h2>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 lg:mb-6 gap-2">
+          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-800">Business Overview</h2>
           <Link 
             to="/analytics" 
-            className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium"
+            className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 font-medium text-sm sm:text-base"
           >
             <span>View Detailed Analytics</span>
-            <FaChartLine />
+            <FaChartLine className="text-sm" />
           </Link>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           <AnimatePresence>
             {statCards.map((card, index) => (
               <StatCard key={card.title} {...card} delay={index * 0.1} />
@@ -485,22 +528,22 @@ export default function OwnerDashboard() {
       </section>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
         {/* Left Column - Quick Actions & Alerts */}
-        <div className="xl:col-span-2 space-y-8">
+        <div className="xl:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8">
           {/* Quick Actions Section */}
           <motion.section 
-            className="bg-white rounded-2xl shadow-xl p-6"
+            className="bg-white rounded-lg sm:rounded-xl lg:rounded-2xl shadow-md sm:shadow-lg lg:shadow-xl p-3 sm:p-4 lg:p-6"
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
           >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold text-gray-800">Quick Actions</h2>
-              <span className="text-gray-500 text-sm">Frequently used actions</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 lg:mb-6 gap-2">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-800">Quick Actions</h2>
+              <span className="text-gray-500 text-xs sm:text-sm">Frequently used actions</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
               {mockData.quickActions.map((action) => (
                 <QuickActionButton key={action.id} action={action} />
               ))}
@@ -509,17 +552,17 @@ export default function OwnerDashboard() {
 
           {/* Pending Alerts Section */}
           <motion.section 
-            className="bg-white rounded-2xl shadow-xl p-6"
+            className="bg-white rounded-lg sm:rounded-xl lg:rounded-2xl shadow-md sm:shadow-lg lg:shadow-xl p-3 sm:p-4 lg:p-6"
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.6 }}
           >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold text-gray-800">Pending Alerts</h2>
-              <span className="text-gray-500 text-sm">Requires your attention</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 lg:mb-6 gap-2">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-800">Pending Alerts</h2>
+              <span className="text-gray-500 text-xs sm:text-sm">Requires your attention</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 lg:gap-4">
               {mockData.pendingAlerts.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} />
               ))}
@@ -529,19 +572,19 @@ export default function OwnerDashboard() {
 
         {/* Right Column - Recent Activity */}
         <motion.section 
-          className="bg-white rounded-2xl shadow-xl p-6"
+          className="bg-white rounded-lg sm:rounded-xl lg:rounded-2xl shadow-md sm:shadow-lg lg:shadow-xl p-3 sm:p-4 lg:p-6"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
         >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800">Recent Activity</h2>
-            <Link to="/activity" className="text-blue-600 hover:text-blue-800 text-sm flex items-center">
-              View All <FaArrowRight className="ml-1" />
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 lg:mb-6 gap-2">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-800">Recent Activity</h2>
+            <Link to="/activity" className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm flex items-center">
+              View All <FaArrowRight className="ml-1 text-xs" />
             </Link>
           </div>
           
-          <ul className="space-y-0">
+          <ul className="space-y-0 max-h-[300px] sm:max-h-[350px] lg:max-h-[400px] overflow-y-auto">
             <AnimatePresence>
               {activities.map((activity) => (
                 <ActivityItem key={activity.id} activity={activity} />
@@ -550,9 +593,9 @@ export default function OwnerDashboard() {
           </ul>
           
           {activities.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <FaBox className="text-4xl mx-auto mb-3 opacity-50" />
-              <p>No recent activity</p>
+            <div className="text-center py-4 sm:py-6 lg:py-8 text-gray-500">
+              <FaBox className="text-2xl sm:text-3xl lg:text-4xl mx-auto mb-2 sm:mb-3 opacity-50" />
+              <p className="text-sm sm:text-base">No recent activity</p>
             </div>
           )}
         </motion.section>

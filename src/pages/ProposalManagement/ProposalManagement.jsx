@@ -448,14 +448,14 @@ const ProposalManagement = ({ user }) => {
 
   /* ---------------------- Render ----------------------- */
   return (
-    <div className="min-h-screen bg-gray-50 p-6 space-y-8">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 lg:space-y-8">
       {/* Loading State */}
       {loading && (
-        <div className="flex items-center justify-center min-h-64">
+        <div className="flex items-center justify-center min-h-48 sm:min-h-64">
           <div className="text-center">
-            <FaSpinner className="animate-spin text-4xl text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading proposal data...</p>
-            <div className="mt-2 text-sm text-gray-500">
+            <FaSpinner className="animate-spin text-3xl sm:text-4xl text-blue-600 mx-auto mb-3 sm:mb-4" />
+            <p className="text-gray-600 text-sm sm:text-base">Loading proposal data...</p>
+            <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-gray-500">
               <div>Proposals: {proposalsLoading ? 'Loading...' : 'Ready'}</div>
               <div>Clients: {clientsLoading ? 'Loading...' : 'Ready'}</div>
               <div>Products: {productsLoading ? 'Loading...' : 'Ready'}</div>
@@ -469,13 +469,13 @@ const ProposalManagement = ({ user }) => {
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-red-50 border border-red-200 rounded-lg p-4"
+          className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4"
         >
           <div className="flex items-center">
-            <FaExclamationTriangle className="text-red-500 mr-2" />
-            <h3 className="text-red-800 font-semibold">Data Loading Issues</h3>
+            <FaExclamationTriangle className="text-red-500 mr-2 text-sm sm:text-base" />
+            <h3 className="text-red-800 font-semibold text-sm sm:text-base">Data Loading Issues</h3>
           </div>
-          <div className="mt-2 text-sm text-red-700">
+          <div className="mt-1 sm:mt-2 text-xs sm:text-sm text-red-700">
             {errors.proposals && <div>Proposals: {errors.proposals}</div>}
             {errors.clients && <div>Clients: {errors.clients}</div>}
             {errors.products && <div>Products: {errors.products}</div>}
@@ -512,7 +512,7 @@ const ProposalManagement = ({ user }) => {
           {/* List / Grid */}
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
             {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
                 <AnimatePresence>
                   {currentPageData.length ? (
                     currentPageData.map((proposal) => (
@@ -525,14 +525,14 @@ const ProposalManagement = ({ user }) => {
                       />
                     ))
                   ) : (
-                    <motion.div className="col-span-full text-center py-12 bg-white rounded-xl shadow">
-                      <FaFilePdf className="text-6xl text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-gray-600">No proposals found</h3>
-                      <p className="text-gray-500 mt-2">
+                    <motion.div className="col-span-full text-center py-8 sm:py-12 bg-white rounded-lg sm:rounded-xl shadow">
+                      <FaFilePdf className="text-4xl sm:text-6xl text-gray-300 mx-auto mb-3 sm:mb-4" />
+                      <h3 className="text-lg sm:text-xl font-semibold text-gray-600">No proposals found</h3>
+                      <p className="text-gray-500 mt-1 sm:mt-2 text-sm sm:text-base">
                         {searchTerm || statusFilter !== 'all' ? 'Try adjusting your search or filters' : 'Get started by creating your first proposal'}
                       </p>
                       {errors.proposals && (
-                        <p className="text-red-500 mt-2">
+                        <p className="text-red-500 mt-1 sm:mt-2 text-sm">
                           There was an issue loading proposals. Please refresh the page.
                         </p>
                       )}
@@ -541,54 +541,57 @@ const ProposalManagement = ({ user }) => {
                 </AnimatePresence>
               </div>
             ) : (
-              <div className="bg-white rounded-xl shadow overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">
-                        <input 
-                          type="checkbox" 
-                          aria-label="Select page" 
-                          checked={selectAllPage} 
-                          onChange={(e) => handleSelectAllPage(e.target.checked)} 
-                        />
-                      </th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Client</th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Total</th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Status</th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Items</th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Expires</th>
-                      <th className="p-3 text-left text-sm font-semibold text-gray-900">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <AnimatePresence>
-                      {currentPageData.length ? (
-                        currentPageData.map((proposal) => (
-                          <ProposalTableRowExtended 
-                            key={proposal.id} 
-                            proposal={proposal} 
-                            onAction={handleAction} 
-                            selected={selectedIds.has(proposal.id)} 
-                            onSelect={() => toggleSelect(proposal.id)} 
-                            changeStatus={changeStatus} 
+              <div className="bg-white rounded-lg sm:rounded-xl shadow overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                          <input 
+                            type="checkbox" 
+                            aria-label="Select page" 
+                            checked={selectAllPage} 
+                            onChange={(e) => handleSelectAllPage(e.target.checked)} 
+                            className="w-3 h-3 sm:w-4 sm:h-4"
                           />
-                        ))
-                      ) : (
-                        <tr>
-                          <td className="p-6 text-center" colSpan={7}>
-                            <div className="text-gray-500">No proposals to show</div>
-                            {errors.proposals && (
-                              <div className="text-red-500 mt-2">
-                                Error loading proposals
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </AnimatePresence>
-                  </tbody>
-                </table>
+                        </th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Client</th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Total</th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Status</th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Items</th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Expires</th>
+                        <th className="p-2 sm:p-3 text-left text-xs sm:text-sm font-semibold text-gray-900">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <AnimatePresence>
+                        {currentPageData.length ? (
+                          currentPageData.map((proposal) => (
+                            <ProposalTableRowExtended 
+                              key={proposal.id} 
+                              proposal={proposal} 
+                              onAction={handleAction} 
+                              selected={selectedIds.has(proposal.id)} 
+                              onSelect={() => toggleSelect(proposal.id)} 
+                              changeStatus={changeStatus} 
+                            />
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="p-4 sm:p-6 text-center" colSpan={7}>
+                              <div className="text-gray-500 text-sm sm:text-base">No proposals to show</div>
+                              {errors.proposals && (
+                                <div className="text-red-500 mt-1 sm:mt-2 text-sm">
+                                  Error loading proposals
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </AnimatePresence>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -644,7 +647,7 @@ const ProposalManagement = ({ user }) => {
 
           {/* Toast */}
           {toast && (
-            <div className="fixed right-6 bottom-6 z-50">
+            <div className="fixed right-3 sm:right-4 lg:right-6 bottom-3 sm:bottom-4 lg:bottom-6 z-50 max-w-xs sm:max-w-sm">
               <AnimatePresence>
                 <Toast 
                   key={toast.message} 

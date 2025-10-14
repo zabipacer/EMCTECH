@@ -18,6 +18,7 @@ export const useLayout = () => {
 
 export default function AppLayout() {
   const [title, setTitle] = useState('Dashboard');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { userProfile, logout } = useAuth();
 
   // Use role from userProfile (single source of truth)
@@ -28,22 +29,29 @@ export default function AppLayout() {
     () => ({ 
       title, 
       setTitle, 
-      currentRole 
+      currentRole,
+      mobileSidebarOpen,
+      setMobileSidebarOpen
     }),
-    [title, currentRole]
+    [title, currentRole, mobileSidebarOpen]
   );
 
   return (
     <LayoutContext.Provider value={contextValue}>
       <div className="min-h-screen flex bg-gray-100">
         {/* Sidebar gets role & signout handler */}
-        <Sidebar currentRole={currentRole} onSignOut={logout} />
+        <Sidebar 
+          currentRole={currentRole} 
+          onSignOut={logout} 
+          mobileOpen={mobileSidebarOpen}
+          setMobileOpen={setMobileSidebarOpen}
+        />
 
         {/* Main area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-w-0">
           <Header />
           <main className="flex-1 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
               {/* The nested routes will render here */}
               <Outlet />
             </div>
