@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { productService, fileService } from './firebaseService';
-import { uid } from './storageUtils';
+import { uid } from './Storageutils.js';
 
 export function useProducts() {
   const [products, setProducts] = useState([]);
