@@ -105,6 +105,7 @@ const ApprovalRoute = ({ children }) => {
 };
 
 const AppRoutes = () => {
+  const { userProfile } = useAuth();
   return (
     <Routes>
       {/* Public Routes */}
@@ -121,7 +122,7 @@ const AppRoutes = () => {
       }>
         <Route path="dashboard/*" element={<DashboardRouter />} />
         <Route path="products" element={<ProductManagement />} />
-        <Route path="proposals" element={<ProposalManagement />} />
+        <Route path="proposals" element={<ProposalManagement user={userProfile}/>} />
         <Route path="proposals/create" element={<CreateProposal />} /> {/* Fixed: Use CreateProposal component */}
         <Route path="clients" element={<ClientManagement />} />
         <Route path="automation" element={<Automation />} />

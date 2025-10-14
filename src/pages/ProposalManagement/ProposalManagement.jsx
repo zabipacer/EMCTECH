@@ -21,6 +21,9 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Toast } from './Toast';
 import DebugInfo from './DebugInfo';
 
+// Utility for PDF download
+import { downloadProposalPdf } from './DownloadProposal';
+
 const ProposalManagement = ({ user }) => {
   // Error handling state
   const [errors, setErrors] = useState({
@@ -169,9 +172,15 @@ const ProposalManagement = ({ user }) => {
     return client?.email || '';
   };
 
-  const downloadProposalPdf = (proposal) => {
-    // Implementation for PDF download
-    showToast('Proposal downloaded (simulated)', 'success');
+  // Updated PDF download handler
+  const downloadProposalPdfHandler = async (proposal) => {
+    try {
+      await downloadProposalPdf(proposal);
+      showToast('Proposal PDF downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      showToast('Failed to download PDF', 'error');
+    }
   };
 
   const duplicateProposal = async (proposal) => {
@@ -182,6 +191,12 @@ const ProposalManagement = ({ user }) => {
         proposalNumber: `DUP-${proposal.proposalNumber || 'PROP'}-${Date.now()}`,
         status: 'draft'
       };
+
+      // Remove undefined fields (especially expires)
+      Object.keys(newProposal).forEach(
+        (key) => newProposal[key] === undefined && delete newProposal[key]
+      );
+
       await addProposal(newProposal);
       showToast('Proposal duplicated successfully', 'success');
     } catch (error) {
@@ -202,7 +217,7 @@ const ProposalManagement = ({ user }) => {
           setEditProposalModalOpen(true);
           break;
         case 'download':
-          downloadProposalPdf(proposal);
+          await downloadProposalPdfHandler(proposal);
           break;
         case 'delete':
           setConfirmDialog({
@@ -602,6 +617,7 @@ const ProposalManagement = ({ user }) => {
             clients={clients || []}
             availableProducts={products || []}
             loading={productsLoading}
+            onAddClient={addClient}
           />
 
           <EditProposalModal

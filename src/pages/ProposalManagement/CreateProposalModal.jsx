@@ -5,14 +5,15 @@ import {
   FaChevronDown, FaChevronUp, FaEdit, FaCopy, FaSave,
   FaPaperPlane, FaHistory, FaBuilding, FaFileAlt,
   FaCheck, FaExclamationTriangle, FaPercent, FaReceipt,
-  FaSpinner
+  FaSpinner, FaIndustry, FaFileInvoice, FaSignature
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductSelectionModal from "./ProductSelectionModal";
 
 const CreateProposalModal = ({ 
   open, 
-  onClose, 
+  onClose,
+  onAddClient,
   onSave,
   clients = [],
   availableProducts = []
@@ -31,7 +32,28 @@ const CreateProposalModal = ({
     notes: "",
     discount: 0,
     taxRate: 10,
-    status: "draft"
+    status: "draft",
+    templateType: "simple", // ADDED: Template type
+    documentNumber: "", // ADDED: For Technical RFQ
+    companyDetails: { // ADDED: For Technical RFQ
+      name: "",
+      address: "",
+      phone: "",
+      email: "",
+      bankAccount: "",
+      mfo: "",
+      taxId: "",
+      oked: ""
+    },
+    deliveryTerms: { // ADDED: For Technical RFQ
+      paymentTerms: "50% prepayment",
+      deliveryTime: "6-8 weeks",
+      incoterms: "DDP"
+    },
+    authorizedSignatory: { // ADDED: For Technical RFQ
+      title: "General manager",
+      name: ""
+    }
   });
   
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -52,7 +74,21 @@ const CreateProposalModal = ({
   const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", company: "" });
   const [emailData, setEmailData] = useState({ subject: "", body: "", to: "" });
   const [collapsedSections, setCollapsedSections] = useState({});
-  const [toast, setToast] = useState(null); // ADDED: Toast state
+  const [toast, setToast] = useState(null);
+
+  // ADDED: Technical RFQ specific state
+  const [rfqItems, setRfqItems] = useState([]);
+  const [currentRfqItem, setCurrentRfqItem] = useState({
+    description: "",
+    technicalDescription: "",
+    manufacturer: "",
+    partNumber: "",
+    unit: "each",
+    quantity: 1,
+    willBeSupplied: "",
+    specifications: [""],
+    imageUrl: ""
+  });
 
   const autoSaveTimeoutRef = useRef(null);
   const toastTimeoutRef = useRef(null);
@@ -73,9 +109,31 @@ const CreateProposalModal = ({
         notes: "",
         discount: 0,
         taxRate: 10,
-        status: "draft"
+        status: "draft",
+        templateType: "simple",
+        documentNumber: "",
+        companyDetails: {
+          name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
+          address: "",
+          phone: "",
+          email: "",
+          bankAccount: "",
+          mfo: "",
+          taxId: "",
+          oked: ""
+        },
+        deliveryTerms: {
+          paymentTerms: "50% prepayment",
+          deliveryTime: "6-8 weeks",
+          incoterms: "DDP"
+        },
+        authorizedSignatory: {
+          title: "General manager",
+          name: ""
+        }
       });
       setSelectedProducts([]);
+      setRfqItems([]);
       setActivityLog([{ 
         id: 1, 
         action: "Created", 
@@ -105,9 +163,9 @@ const CreateProposalModal = ({
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [proposal, selectedProducts, open]);
+  }, [proposal, selectedProducts, rfqItems, open]);
 
-  // ADDED: Toast cleanup
+  // Toast cleanup
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -121,7 +179,6 @@ const CreateProposalModal = ({
     addActivityLog("Auto-saved", "System");
   };
 
-  // ADDED: Show toast function
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
     if (toastTimeoutRef.current) {
@@ -132,7 +189,13 @@ const CreateProposalModal = ({
     }, 3000);
   };
 
-  // Filter products based on search
+  useEffect(() => {
+    if (open) {
+      console.log('Available products in modal:', availableProducts);
+      console.log('Available products count:', availableProducts.length);
+    }
+  }, [open, availableProducts]);
+
   const filteredProducts = availableProducts.filter(product =>
     product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.category?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -147,7 +210,18 @@ const CreateProposalModal = ({
     }));
   };
 
-  // Handle client selection - FIXED: Use string comparison
+  // ADDED: Handle nested object changes for Technical RFQ
+  const handleNestedChange = (section, field, value) => {
+    setProposal(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  // Handle client selection
   const handleClientSelect = (clientId) => {
     const client = clients.find(c => c.id === clientId || c.id === parseInt(clientId));
     if (client) {
@@ -192,7 +266,7 @@ const CreateProposalModal = ({
     }));
   };
 
-  // Add product to proposal - FIXED: Handle product data structure
+  // Add product to proposal
   const handleAddProduct = (product) => {
     const quantity = parseInt(quantityInputs[product.id]) || 1;
     const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
@@ -228,6 +302,80 @@ const CreateProposalModal = ({
     setTaxToggle(prev => ({ ...prev, [product.id]: true }));
     
     showToast(`Added ${product.name} to proposal`, 'success');
+  };
+
+  // ADDED: Handle Technical RFQ item changes
+  const handleRfqItemChange = (field, value) => {
+    setCurrentRfqItem(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // ADDED: Handle RFQ specification changes
+  const handleRfqSpecificationChange = (index, value) => {
+    const updatedSpecs = [...currentRfqItem.specifications];
+    updatedSpecs[index] = value;
+    setCurrentRfqItem(prev => ({
+      ...prev,
+      specifications: updatedSpecs
+    }));
+  };
+
+  // ADDED: Add RFQ specification field
+  const addRfqSpecification = () => {
+    setCurrentRfqItem(prev => ({
+      ...prev,
+      specifications: [...prev.specifications, ""]
+    }));
+  };
+
+  // ADDED: Remove RFQ specification field
+  const removeRfqSpecification = (index) => {
+    if (currentRfqItem.specifications.length > 1) {
+      const updatedSpecs = currentRfqItem.specifications.filter((_, i) => i !== index);
+      setCurrentRfqItem(prev => ({
+        ...prev,
+        specifications: updatedSpecs
+      }));
+    }
+  };
+
+  // ADDED: Add RFQ item
+  const addRfqItem = () => {
+    if (!currentRfqItem.description) {
+      showToast('Item description is required', 'error');
+      return;
+    }
+
+    const newItem = {
+      ...currentRfqItem,
+      id: Date.now(),
+      itemNumber: rfqItems.length + 1
+    };
+
+    setRfqItems(prev => [...prev, newItem]);
+    
+    // Reset current item
+    setCurrentRfqItem({
+      description: "",
+      technicalDescription: "",
+      manufacturer: "",
+      partNumber: "",
+      unit: "each",
+      quantity: 1,
+      willBeSupplied: "",
+      specifications: [""],
+      imageUrl: ""
+    });
+
+    showToast('Technical item added successfully', 'success');
+  };
+
+  // ADDED: Remove RFQ item
+  const removeRfqItem = (itemId) => {
+    setRfqItems(prev => prev.filter(item => item.id !== itemId));
+    showToast('Technical item removed', 'info');
   };
 
   // Calculate line total
@@ -274,29 +422,31 @@ const CreateProposalModal = ({
     showToast('Product duplicated', 'success');
   };
 
-  // Add new client - FIXED: Proper client creation
-  const handleAddClient = () => {
+  // Add new client
+  const handleAddClient = async () => {
     if (!newClient.name) {
       showToast('Client name is required', 'error');
       return;
     }
 
-    const newClientWithId = {
-      ...newClient,
-      id: Date.now().toString()
-    };
-    
-    setProposal(prev => ({
-      ...prev,
-      clientId: newClientWithId.id,
-      clientName: newClientWithId.name,
-      clientEmail: newClientWithId.email
-    }));
-    
-    setNewClient({ name: "", email: "", phone: "", company: "" });
-    setIsClientModalOpen(false);
-    addActivityLog("Client added", "You");
-    showToast('Client added successfully', 'success');
+    try {
+      const newClientId = await onAddClient(newClient);
+      
+      setProposal(prev => ({
+        ...prev,
+        clientId: newClientId,
+        clientName: newClient.name,
+        clientEmail: newClient.email
+      }));
+      
+      setNewClient({ name: "", email: "", phone: "", company: "" });
+      setIsClientModalOpen(false);
+      addActivityLog("Client added", "You");
+      showToast('Client added successfully', 'success');
+    } catch (error) {
+      console.error('Error adding client:', error);
+      showToast('Error adding client: ' + error.message, 'error');
+    }
   };
 
   // Calculate totals
@@ -341,7 +491,11 @@ const CreateProposalModal = ({
 
   // Generate PDF (simulated)
   const handleGeneratePDF = () => {
-    if (selectedProducts.length === 0) {
+    if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
+      showToast('Please add technical items before generating PDF', 'error');
+      return;
+    }
+    if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
       showToast('Please add products before generating PDF', 'error');
       return;
     }
@@ -350,10 +504,16 @@ const CreateProposalModal = ({
     showToast('PDF preview generated', 'success');
   };
 
-  // Save proposal - FIXED: Proper error handling and validation
+  // Save proposal
   const handleSaveProposal = async (status = 'draft') => {
-    if (selectedProducts.length === 0) {
+    // Validate based on template type
+    if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
       showToast('Please add at least one product to the proposal', 'error');
+      return;
+    }
+
+    if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
+      showToast('Please add at least one technical item to the proposal', 'error');
       return;
     }
 
@@ -363,33 +523,52 @@ const CreateProposalModal = ({
     }
 
     try {
-      const proposalData = {
-        proposalNumber: proposal.proposalNumber,
-        clientId: proposal.clientId,
-        client: proposal.clientName,
-        company: proposal.company,
-        proposalTitle: proposal.proposalTitle,
-        proposalDate: proposal.proposalDate,
-        validUntil: proposal.validUntil,
-        terms: proposal.terms,
-        notes: proposal.notes,
-        taxRate: proposal.taxRate,
-        status: status,
-        products: selectedProducts.map(p => ({
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          quantity: p.quantity,
-          unitPrice: p.unitPrice,
-          discount: p.discount,
-          taxable: p.taxable,
-          lineTotal: p.lineTotal
-        })),
-        subtotal: subtotal,
-        totalDiscount: totalDiscount,
-        taxAmount: taxAmount,
-        grandTotal: grandTotal
-      };
+      let proposalData;
+
+      if (proposal.templateType === 'technical-rfq') {
+        // Technical RFQ data structure
+        proposalData = {
+          ...proposal,
+          status: status,
+          items: rfqItems,
+          // Include simple products as fallback if needed
+          products: selectedProducts,
+          subtotal: subtotal,
+          totalDiscount: totalDiscount,
+          taxAmount: taxAmount,
+          grandTotal: grandTotal
+        };
+      } else {
+        // Simple proposal data structure
+        proposalData = {
+          proposalNumber: proposal.proposalNumber,
+          clientId: proposal.clientId,
+          client: proposal.clientName,
+          company: proposal.company,
+          proposalTitle: proposal.proposalTitle,
+          proposalDate: proposal.proposalDate,
+          validUntil: proposal.validUntil,
+          terms: proposal.terms,
+          notes: proposal.notes,
+          taxRate: proposal.taxRate,
+          status: status,
+          templateType: proposal.templateType,
+          products: selectedProducts.map(p => ({
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            quantity: p.quantity,
+            unitPrice: p.unitPrice,
+            discount: p.discount,
+            taxable: p.taxable,
+            lineTotal: p.lineTotal
+          })),
+          subtotal: subtotal,
+          totalDiscount: totalDiscount,
+          taxAmount: taxAmount,
+          grandTotal: grandTotal
+        };
+      }
 
       await onSave(proposalData);
       showToast(`Proposal ${status === 'draft' ? 'saved as draft' : 'saved'} successfully!`, 'success');
@@ -430,9 +609,31 @@ const CreateProposalModal = ({
         notes: "",
         discount: 0,
         taxRate: 10,
-        status: "draft"
+        status: "draft",
+        templateType: "simple",
+        documentNumber: "",
+        companyDetails: {
+          name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
+          address: "",
+          phone: "",
+          email: "",
+          bankAccount: "",
+          mfo: "",
+          taxId: "",
+          oked: ""
+        },
+        deliveryTerms: {
+          paymentTerms: "50% prepayment",
+          deliveryTime: "6-8 weeks",
+          incoterms: "DDP"
+        },
+        authorizedSignatory: {
+          title: "General manager",
+          name: ""
+        }
       });
       setSelectedProducts([]);
+      setRfqItems([]);
       addActivityLog("Form reset", "You");
       showToast('Form reset successfully', 'info');
     }
@@ -489,6 +690,221 @@ const CreateProposalModal = ({
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Left Column - Proposal Details */}
             <div className="lg:col-span-3 space-y-6">
+              {/* Template Selection */}
+              <motion.div
+                className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                    <FaFileAlt className="mr-2 text-blue-500" /> Proposal Template
+                  </h2>
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Template Type
+                  </label>
+                  <select
+                    value={proposal.templateType || 'simple'}
+                    onChange={(e) => handleProposalChange(e)}
+                    name="templateType"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="simple">Simple Proposal</option>
+                    <option value="technical-rfq">Technical RFQ</option>
+                  </select>
+                </div>
+
+                {/* Technical RFQ Fields */}
+                {proposal.templateType === 'technical-rfq' && (
+                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                    <h4 className="font-semibold text-blue-800 mb-2 flex items-center">
+                      <FaIndustry className="mr-2" /> Technical RFQ Details
+                    </h4>
+                    
+                    {/* Document Number */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Document Number *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={proposal.documentNumber || ''}
+                          onChange={(e) => handleProposalChange(e)}
+                          name="documentNumber"
+                          placeholder="e.g., 50/63440"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Company Legal Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={proposal.companyDetails?.name || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'name', e.target.value)}
+                          placeholder="LLC «COMPANY NAME»"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Company Details */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Company Address
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.companyDetails?.address || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'address', e.target.value)}
+                          placeholder="Full company address"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.companyDetails?.phone || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'phone', e.target.value)}
+                          placeholder="+998 90 122 55 16"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bank Details */}
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Bank Account
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.companyDetails?.bankAccount || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'bankAccount', e.target.value)}
+                          placeholder="2020 8000 0052 8367 7001"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          MFO
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.companyDetails?.mfo || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'mfo', e.target.value)}
+                          placeholder="00419"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tax ID
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.companyDetails?.taxId || ''}
+                          onChange={(e) => handleNestedChange('companyDetails', 'taxId', e.target.value)}
+                          placeholder="307 738 207"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Delivery Terms */}
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Payment Terms
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.deliveryTerms?.paymentTerms || ''}
+                          onChange={(e) => handleNestedChange('deliveryTerms', 'paymentTerms', e.target.value)}
+                          placeholder="50% prepayment"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Delivery Time
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.deliveryTerms?.deliveryTime || ''}
+                          onChange={(e) => handleNestedChange('deliveryTerms', 'deliveryTime', e.target.value)}
+                          placeholder="6-8 weeks"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Incoterms
+                        </label>
+                        <select
+                          value={proposal.deliveryTerms?.incoterms || 'DDP'}
+                          onChange={(e) => handleNestedChange('deliveryTerms', 'incoterms', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="DDP">DDP</option>
+                          <option value="FOB">FOB</option>
+                          <option value="CIF">CIF</option>
+                          <option value="EXW">EXW</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Authorized Signatory */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Signatory Title
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.authorizedSignatory?.title || ''}
+                          onChange={(e) => handleNestedChange('authorizedSignatory', 'title', e.target.value)}
+                          placeholder="General manager"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Signatory Name
+                        </label>
+                        <input
+                          type="text"
+                          value={proposal.authorizedSignatory?.name || ''}
+                          onChange={(e) => handleNestedChange('authorizedSignatory', 'name', e.target.value)}
+                          placeholder="S.S. Abdushukurov"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+
               {/* Header Section */}
               <motion.div
                 className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
@@ -572,145 +988,365 @@ const CreateProposalModal = ({
                 )}
               </motion.div>
 
-              {/* Product Selection */}
-              <motion.div
-                className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                    <FaShoppingCart className="mr-2 text-blue-500" /> Product Selection
-                  </h2>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => toggleSection('products')}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      {collapsedSections.products ? <FaChevronDown /> : <FaChevronUp />}
-                    </button>
-                    <button
-                      onClick={() => setIsProductModalOpen(true)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
-                    >
-                      <FaPlus className="mr-2" /> Add Products
-                    </button>
+              {/* Product/Item Selection based on Template Type */}
+              {proposal.templateType === 'simple' ? (
+                // Simple Proposal Product Selection
+                <motion.div
+                  className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                      <FaShoppingCart className="mr-2 text-blue-500" /> Product Selection
+                    </h2>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleSection('products')}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {collapsedSections.products ? <FaChevronDown /> : <FaChevronUp />}
+                      </button>
+                      <button
+                        onClick={() => setIsProductModalOpen(true)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
+                      >
+                        <FaPlus className="mr-2" /> Add Products
+                      </button>
+                    </div>
                   </div>
-                </div>
-                
-                {!collapsedSections.products && (
-                  <>
-                    {selectedProducts.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <FaShoppingCart className="text-4xl mx-auto mb-3 text-gray-300" />
-                        <p>No products added to the proposal yet.</p>
+                  
+                  {!collapsedSections.products && (
+                    <>
+                      {selectedProducts.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <FaShoppingCart className="text-4xl mx-auto mb-3 text-gray-300" />
+                          <p>No products added to the proposal yet.</p>
+                          <button
+                            onClick={() => setIsProductModalOpen(true)}
+                            className="text-blue-600 hover:text-blue-800 mt-2"
+                          >
+                            Click here to add products
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Item Name</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Qty</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Unit Price</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Discount %</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Tax</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Line Total</th>
+                                <th className="text-left p-3 text-sm font-medium text-gray-600">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <AnimatePresence>
+                                {selectedProducts.map((product) => (
+                                  <motion.tr
+                                    key={product.id}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="border-b border-gray-100"
+                                  >
+                                    <td className="p-3">
+                                      <div>
+                                        <div className="font-medium text-gray-900">{product.name}</div>
+                                        <div className="text-sm text-gray-500">{product.category}</div>
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={product.quantity}
+                                        onChange={(e) => handleUpdateProduct(product.id, 'quantity', parseInt(e.target.value) || 1)}
+                                        className="w-20 px-2 py-1 border border-gray-300 rounded text-center"
+                                      />
+                                    </td>
+                                    <td className="p-3">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={product.unitPrice}
+                                        onChange={(e) => handleUpdateProduct(product.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                        className="w-24 px-2 py-1 border border-gray-300 rounded"
+                                      />
+                                    </td>
+                                    <td className="p-3">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={product.discount}
+                                        onChange={(e) => handleUpdateProduct(product.id, 'discount', parseFloat(e.target.value) || 0)}
+                                        className="w-20 px-2 py-1 border border-gray-300 rounded text-center"
+                                      />
+                                    </td>
+                                    <td className="p-3">
+                                      <label className="flex items-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={product.taxable}
+                                          onChange={() => handleUpdateProduct(product.id, 'taxable', !product.taxable)}
+                                          className="mr-2"
+                                        />
+                                        Taxable
+                                      </label>
+                                    </td>
+                                    <td className="p-3 font-semibold">{formatCurrency(product.lineTotal)}</td>
+                                    <td className="p-3">
+                                      <div className="flex space-x-2">
+                                        <button
+                                          onClick={() => handleDuplicateProduct(product)}
+                                          className="text-blue-600 hover:text-blue-800"
+                                          title="Duplicate"
+                                        >
+                                          <FaCopy size={14} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemoveProduct(product.id)}
+                                          className="text-red-600 hover:text-red-800"
+                                          title="Remove"
+                                        >
+                                          <FaTrashAlt size={14} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </motion.tr>
+                                ))}
+                              </AnimatePresence>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              ) : (
+                // Technical RFQ Item Selection
+                <motion.div
+                  className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold text-gray-800 flex items-center">
+                      <FaIndustry className="mr-2 text-blue-500" /> Technical Items
+                    </h2>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => toggleSection('rfqItems')}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {collapsedSections.rfqItems ? <FaChevronDown /> : <FaChevronUp />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {!collapsedSections.rfqItems && (
+                    <>
+                      {/* Add New Technical Item Form */}
+                      <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                        <h4 className="font-semibold text-gray-800 mb-3">Add Technical Item</h4>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Description (CAPS) *
+                            </label>
+                            <input
+                              type="text"
+                              value={currentRfqItem.description}
+                              onChange={(e) => handleRfqItemChange('description', e.target.value.toUpperCase())}
+                              placeholder="CERABAR PMP51B - PRESSURE TRANSMITTER"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Technical Description
+                            </label>
+                            <input
+                              type="text"
+                              value={currentRfqItem.technicalDescription}
+                              onChange={(e) => handleRfqItemChange('technicalDescription', e.target.value)}
+                              placeholder="Cerabar PMP51B - pressure transmitter PMP51B-AABADBH6AA3PCA1VNJA1+VDZ1"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Manufacturer/OEM
+                            </label>
+                            <input
+                              type="text"
+                              value={currentRfqItem.manufacturer}
+                              onChange={(e) => handleRfqItemChange('manufacturer', e.target.value)}
+                              placeholder="Endress+ Hauser"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Part Number
+                            </label>
+                            <input
+                              type="text"
+                              value={currentRfqItem.partNumber}
+                              onChange={(e) => handleRfqItemChange('partNumber', e.target.value)}
+                              placeholder="PMP51B-AABADBH6AA3PCA1VNJA1+VDZ1"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unit
+                            </label>
+                            <select
+                              value={currentRfqItem.unit}
+                              onChange={(e) => handleRfqItemChange('unit', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            >
+                              <option value="each">each</option>
+                              <option value="set">set</option>
+                              <option value="piece">piece</option>
+                              <option value="meter">meter</option>
+                              <option value="kg">kg</option>
+                              <option value="liter">liter</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={currentRfqItem.quantity}
+                              onChange={(e) => handleRfqItemChange('quantity', parseInt(e.target.value) || 1)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Will be Supplied
+                            </label>
+                            <input
+                              type="text"
+                              value={currentRfqItem.willBeSupplied}
+                              onChange={(e) => handleRfqItemChange('willBeSupplied', e.target.value)}
+                              placeholder="Alternative description"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Specifications */}
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Technical Specifications
+                          </label>
+                          {currentRfqItem.specifications.map((spec, index) => (
+                            <div key={index} className="flex gap-2 mb-2">
+                              <input
+                                type="text"
+                                value={spec}
+                                onChange={(e) => handleRfqSpecificationChange(index, e.target.value)}
+                                placeholder="e.g., Pressure: 1.6MPa"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                              />
+                              <button
+                                onClick={() => removeRfqSpecification(index)}
+                                className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                disabled={currentRfqItem.specifications.length === 1}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={addRfqSpecification}
+                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                          >
+                            Add Specification
+                          </button>
+                        </div>
+
                         <button
-                          onClick={() => setIsProductModalOpen(true)}
-                          className="text-blue-600 hover:text-blue-800 mt-2"
+                          onClick={addRfqItem}
+                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                          disabled={!currentRfqItem.description}
                         >
-                          Click here to add products
+                          Add Technical Item
                         </button>
                       </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                          <thead>
-                            <tr className="border-b border-gray-200">
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Item Name</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Qty</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Unit Price</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Discount %</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Tax</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Line Total</th>
-                              <th className="text-left p-3 text-sm font-medium text-gray-600">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <AnimatePresence>
-                              {selectedProducts.map((product) => (
-                                <motion.tr
-                                  key={product.id}
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  className="border-b border-gray-100"
+
+                      {/* Technical Items List */}
+                      {rfqItems.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <FaFileInvoice className="text-4xl mx-auto mb-3 text-gray-300" />
+                          <p>No technical items added yet.</p>
+                          <p className="text-sm">Use the form above to add technical items</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <h4 className="font-semibold text-gray-800">Added Items ({rfqItems.length})</h4>
+                          {rfqItems.map((item, index) => (
+                            <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h5 className="font-semibold text-gray-900">{item.description}</h5>
+                                  <p className="text-sm text-gray-600">{item.technicalDescription}</p>
+                                </div>
+                                <button
+                                  onClick={() => removeRfqItem(item.id)}
+                                  className="text-red-600 hover:text-red-800"
                                 >
-                                  <td className="p-3">
-                                    <div>
-                                      <div className="font-medium text-gray-900">{product.name}</div>
-                                      <div className="text-sm text-gray-500">{product.category}</div>
-                                    </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      value={product.quantity}
-                                      onChange={(e) => handleUpdateProduct(product.id, 'quantity', parseInt(e.target.value) || 1)}
-                                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center"
-                                    />
-                                  </td>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={product.unitPrice}
-                                      onChange={(e) => handleUpdateProduct(product.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                      className="w-24 px-2 py-1 border border-gray-300 rounded"
-                                    />
-                                  </td>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max="100"
-                                      value={product.discount}
-                                      onChange={(e) => handleUpdateProduct(product.id, 'discount', parseFloat(e.target.value) || 0)}
-                                      className="w-20 px-2 py-1 border border-gray-300 rounded text-center"
-                                    />
-                                  </td>
-                                  <td className="p-3">
-                                    <label className="flex items-center">
-                                      <input
-                                        type="checkbox"
-                                        checked={product.taxable}
-                                        onChange={() => handleUpdateProduct(product.id, 'taxable', !product.taxable)}
-                                        className="mr-2"
-                                      />
-                                      Taxable
-                                    </label>
-                                  </td>
-                                  <td className="p-3 font-semibold">{formatCurrency(product.lineTotal)}</td>
-                                  <td className="p-3">
-                                    <div className="flex space-x-2">
-                                      <button
-                                        onClick={() => handleDuplicateProduct(product)}
-                                        className="text-blue-600 hover:text-blue-800"
-                                        title="Duplicate"
-                                      >
-                                        <FaCopy size={14} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleRemoveProduct(product.id)}
-                                        className="text-red-600 hover:text-red-800"
-                                        title="Remove"
-                                      >
-                                        <FaTrashAlt size={14} />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </motion.tr>
-                              ))}
-                            </AnimatePresence>
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-              </motion.div>
+                                  <FaTrashAlt />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-4 gap-4 text-sm">
+                                <div><strong>Manufacturer:</strong> {item.manufacturer}</div>
+                                <div><strong>Part No:</strong> {item.partNumber}</div>
+                                <div><strong>Qty:</strong> {item.quantity} {item.unit}</div>
+                                <div><strong>Will Supply:</strong> {item.willBeSupplied}</div>
+                              </div>
+                              {item.specifications.some(spec => spec.trim()) && (
+                                <div className="mt-2">
+                                  <strong className="text-sm">Specifications:</strong>
+                                  <ul className="text-sm text-gray-600 list-disc list-inside">
+                                    {item.specifications.filter(spec => spec.trim()).map((spec, idx) => (
+                                      <li key={idx}>{spec}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              )}
 
               {/* Terms and Notes */}
               <motion.div
@@ -814,7 +1450,10 @@ const CreateProposalModal = ({
                   <button
                     onClick={handleGeneratePDF}
                     className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center font-medium"
-                    disabled={selectedProducts.length === 0}
+                    disabled={
+                      (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+                      (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+                    }
                   >
                     <FaFilePdf className="mr-2" /> Preview PDF
                   </button>
@@ -822,15 +1461,19 @@ const CreateProposalModal = ({
                   <button
                     onClick={() => handleSaveProposal("draft")}
                     className="w-full bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center justify-center font-medium"
-                    disabled={selectedProducts.length === 0}
+                    disabled={
+                      (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+                      (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+                    }
                   >
                     <FaSave className="mr-2" /> Save Draft
                   </button>
 
                   <button
                     onClick={() => {
-                      if (selectedProducts.length === 0) {
-                        showToast('Please add products before sending', 'error');
+                      if ((proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+                          (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)) {
+                        showToast(`Please add ${proposal.templateType === 'simple' ? 'products' : 'technical items'} before sending`, 'error');
                         return;
                       }
                       if (!proposal.clientEmail && !proposal.clientId) {
@@ -896,14 +1539,20 @@ const CreateProposalModal = ({
             <button
               onClick={() => handleSaveProposal("draft")}
               className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
-              disabled={selectedProducts.length === 0}
+              disabled={
+                (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+                (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+              }
             >
               Save Draft
             </button>
             <button
               onClick={() => handleSaveProposal("sent")}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
-              disabled={selectedProducts.length === 0}
+              disabled={
+                (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+                (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+              }
             >
               Save & Send
             </button>
@@ -978,6 +1627,7 @@ const CreateProposalModal = ({
             onClose={() => setIsPdfPreviewOpen(false)}
             proposal={proposal}
             selectedProducts={selectedProducts}
+            rfqItems={rfqItems}
             subtotal={subtotal}
             totalDiscount={totalDiscount}
             taxAmount={taxAmount}
@@ -1004,7 +1654,7 @@ const CreateProposalModal = ({
   );
 };
 
-// ... (Keep all the sub-components exactly as they are - ProductSelectionModal, ClientModal, PDFPreviewModal, EmailModal)
+// Sub-components (ClientModal, PDFPreviewModal, EmailModal) remain the same
 const ClientModal = ({ open, onClose, newClient, onNewClientChange, onAddClient }) => {
   if (!open) return null;
 
@@ -1095,6 +1745,7 @@ const PDFPreviewModal = ({
   onClose, 
   proposal, 
   selectedProducts, 
+  rfqItems,
   subtotal, 
   totalDiscount, 
   taxAmount, 
@@ -1158,33 +1809,51 @@ const PDFPreviewModal = ({
               </div>
             </div>
             
-            <table className="w-full mb-8">
-              <thead>
-                <tr className="border-b-2 border-gray-300">
-                  <th className="text-left py-2">Item</th>
-                  <th className="text-right py-2">Qty</th>
-                  <th className="text-right py-2">Price</th>
-                  <th className="text-right py-2">Discount</th>
-                  <th className="text-right py-2">Tax</th>
-                  <th className="text-right py-2">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedProducts.map((product) => (
-                  <tr key={product.id} className="border-b border-gray-200">
-                    <td className="py-3">
-                      <div className="font-medium">{product.name}</div>
-                      <div className="text-sm text-gray-600">{product.category}</div>
-                    </td>
-                    <td className="text-right py-3">{product.quantity}</td>
-                    <td className="text-right py-3">{formatCurrency(product.unitPrice)}</td>
-                    <td className="text-right py-3">{product.discount}%</td>
-                    <td className="text-right py-3">{product.taxable ? "Yes" : "No"}</td>
-                    <td className="text-right py-3 font-medium">{formatCurrency(product.lineTotal)}</td>
-                  </tr>
+            {/* Show different content based on template type */}
+            {proposal.templateType === 'technical-rfq' ? (
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Technical Items</h3>
+                {rfqItems.map((item, index) => (
+                  <div key={item.id} className="border-b border-gray-200 py-4">
+                    <h4 className="font-semibold">{item.description}</h4>
+                    <p className="text-sm text-gray-600">{item.technicalDescription}</p>
+                    <div className="grid grid-cols-3 gap-4 text-sm mt-2">
+                      <div><strong>Manufacturer:</strong> {item.manufacturer}</div>
+                      <div><strong>Qty:</strong> {item.quantity} {item.unit}</div>
+                      <div><strong>Part No:</strong> {item.partNumber}</div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <table className="w-full mb-8">
+                <thead>
+                  <tr className="border-b-2 border-gray-300">
+                    <th className="text-left py-2">Item</th>
+                    <th className="text-right py-2">Qty</th>
+                    <th className="text-right py-2">Price</th>
+                    <th className="text-right py-2">Discount</th>
+                    <th className="text-right py-2">Tax</th>
+                    <th className="text-right py-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedProducts.map((product) => (
+                    <tr key={product.id} className="border-b border-gray-200">
+                      <td className="py-3">
+                        <div className="font-medium">{product.name}</div>
+                        <div className="text-sm text-gray-600">{product.category}</div>
+                      </td>
+                      <td className="text-right py-3">{product.quantity}</td>
+                      <td className="text-right py-3">{formatCurrency(product.unitPrice)}</td>
+                      <td className="text-right py-3">{product.discount}%</td>
+                      <td className="text-right py-3">{product.taxable ? "Yes" : "No"}</td>
+                      <td className="text-right py-3 font-medium">{formatCurrency(product.lineTotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             
             <div className="flex justify-end mb-8">
               <div className="w-64">
@@ -1315,4 +1984,5 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
     </motion.div>
   );
 };
+
 export default CreateProposalModal;

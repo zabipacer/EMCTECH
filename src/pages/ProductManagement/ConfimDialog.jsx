@@ -1,22 +1,34 @@
-import React from "react";
-import { FaExclamationTriangle } from "react-icons/fa";
+// ConfirmDialog.jsx - make sure it's working
+import React from 'react';
+import { motion } from 'framer-motion';
 
-const ErrorComponent = ({ error, onRetry }) => {
+const ConfirmDialog = ({ title, message, onConfirm, onCancel }) => {
   return (
-    <div className="p-6 min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg shadow-md text-center max-w-md">
-        <FaExclamationTriangle className="text-red-500 text-4xl mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Products</h2>
-        <p className="text-gray-600 mb-4">{error}</p>
-        <button 
-          onClick={onRetry} 
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Retry
-        </button>
-      </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white p-6 rounded-lg max-w-md w-full mx-4"
+      >
+        <h3 className="text-lg font-semibold mb-2">{title}</h3>
+        <p className="text-gray-600 mb-6">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 };
 
-export default ErrorComponent;
+export default ConfirmDialog;

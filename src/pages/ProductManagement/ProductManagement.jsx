@@ -3,7 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import { FaExclamationTriangle, FaImage, FaPlus } from "react-icons/fa";
 
 import { useProducts, useProductFilters } from './hooks';
-import {  uid, toCSV } from './constants';
+import { uid, toCSV } from './constants';
 
 import Header from './Header';
 import Stats from './Stats';
@@ -17,6 +17,44 @@ import ImportModal from './ImportModal';
 import ConfirmDialog from './ConfimDialog';
 import Toast from './Toast';
 import ErrorComponent from './ErrorComponent';
+
+// Field mapping for flexible CSV import
+const FIELD_MAP = {
+  nameEN: ["EN", "Product name (EN)", "Name", "Product Name", "ProductName", "Name EN", "Product Name EN"],
+  nameRU: ["RU", "Product name (RU)", "Name RU", "Product Name RU"],
+  nameUZ: ["UZ", "Product name (UZ)", "Name UZ", "Product Name UZ"],
+  sku: ["SKU", "Product SKU", "Sku", "Product Code", "Code"],
+  price: ["Price ($)", "Price", "Unit Price", "Amount", "Price USD", "Cost USD"],
+  cost: ["Cost ($)", "Cost", "Unit Cost", "Purchase Price"],
+  stock: ["Stock Quantity", "Stock", "Quantity", "Qty", "Inventory"],
+  lowStockThreshold: ["Low Stock Threshold", "Low Stock", "LowStock", "Min Stock", "Minimum Stock"],
+  category: ["Category", "Product category", "Product Category", "Category Name"],
+  status: ["Status", "Product Status", "State"],
+  company: ["Company/Brand", "Company", "Brand", "Manufacturer", "Supplier"],
+  description: ["Description", "Product Description", "Desc", "Product Desc"],
+  slug: ["Slug", "URL Slug", "Product URL"],
+  metaTitle: ["Meta Title", "MetaTitle", "SEO Title", "Title"],
+  metaDescription: ["Meta Description", "MetaDescription", "SEO Description", "SEO Desc"]
+};
+
+// Header normalization function
+function normalizeHeaders(raw) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(raw)) {
+    let found = false;
+    for (const [field, aliases] of Object.entries(FIELD_MAP)) {
+      if (aliases.some(alias => alias.toLowerCase() === key.trim().toLowerCase())) {
+        normalized[field] = value;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      normalized[key] = value; // fallback for unmapped fields
+    }
+  }
+  return normalized;
+}
 
 export default function ProductManagement() {
   const { products, loading, error, saveProduct, deleteProducts } = useProducts();
@@ -198,7 +236,7 @@ export default function ProductManagement() {
     showToast(`Exported ${rows.length} products to CSV`, "success");
   }, [filteredAndSorted, selectedIds, showToast]);
 
-const handleDeleteSelected = useCallback(() => {
+ const handleDeleteSelected = useCallback(() => {
   const ids = Array.from(selectedIds);
   if (ids.length === 0) {
     showToast("Select products first", "error");
@@ -216,21 +254,24 @@ const handleDeleteSelected = useCallback(() => {
         showToast(`Deleted ${ids.length} product${ids.length > 1 ? 's' : ''}`, "success");
       } catch (err) {
         console.error('Delete selected error:', err);
-        // Don't show toast here - the error state will handle it
         setConfirm(null);
+        showToast(`Failed to delete products: ${err.message}`, "error");
       }
     },
     onCancel: () => setConfirm(null)
   });
 }, [selectedIds, deleteProducts, clearSelection, showToast]);
-// Add this useEffect to monitor delete operations
-useEffect(() => {
-  if (error) {
-    console.log('🔄 Current error state:', error);
-    console.log('📊 Products count during error:', products.length);
-    console.log('⏳ Loading state during error:', loading);
-  }
-}, [error, products, loading]);
+
+  // Add this useEffect to monitor delete operations
+  useEffect(() => {
+    if (error) {
+      console.log('🔄 Current error state:', error);
+      console.log('📊 Products count during error:', products.length);
+      console.log('⏳ Loading state during error:', loading);
+    }
+  }, [error, products, loading]);
+
+ // In ProductManagement component - fix handleDeleteProduct
 const handleDeleteProduct = useCallback((product) => {
   setConfirm({
     title: "Delete Product",
@@ -242,30 +283,89 @@ const handleDeleteProduct = useCallback((product) => {
         showToast("Product deleted successfully", "success");
       } catch (err) {
         console.error('Delete single product error:', err);
-        // Don't show toast here - the error state will handle it
         setConfirm(null);
+        showToast(`Failed to delete product: ${err.message}`, "error");
       }
     },
     onCancel: () => setConfirm(null)
   });
-}, [deleteProducts, showToast]);/* ------------------ Render ------------------ */
+}, [deleteProducts, showToast]);
 
-if (error) {
-  console.error('❌ Main component error:', error);
-  return <ErrorComponent error={error} onRetry={() => window.location.reload()} />;
-} // Add this useEffect to log state changes
-useEffect(() => {
-  console.log('🔍 ProductManagement State:', {
-    productsCount: products.length,
-    loading,
-    error,
-    selectedIds: Array.from(selectedIds),
-    viewMode,
-    page,
-    productModalOpen,
-    importOpen
-  });
-}, [products, loading, error, selectedIds, viewMode, page, productModalOpen, importOpen]);
+// Fix handleDeleteSelected
+
+
+  // Enhanced import handler with flexible mapping
+  const handleImport = useCallback(async (productsFromCsv) => {
+    let imported = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const raw of productsFromCsv) {
+      try {
+        // Normalize CSV headers to internal field names
+        const norm = normalizeHeaders(raw);
+        
+        // Create product with normalized fields
+        const product = {
+          name: { 
+            EN: norm.nameEN || norm.name || "", 
+            RU: norm.nameRU || "", 
+            UZ: norm.nameUZ || "" 
+          },
+          sku: norm.sku || "",
+          price: parseFloat(norm.price) || 0,
+          cost: parseFloat(norm.cost) || 0,
+          stock: parseInt(norm.stock) || 0,
+          lowStockThreshold: parseInt(norm.lowStockThreshold) || 5,
+          category: norm.category || "",
+          status: (norm.status || "draft").toLowerCase(),
+          company: norm.company || "Innova",
+          description: norm.description || "",
+          seo: {
+            slug: norm.slug || "",
+            title: norm.metaTitle || "",
+            description: norm.metaDescription || ""
+          },
+          specs: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        // Validate required fields
+        if (!product.name.EN && !product.sku) {
+          throw new Error("Missing required fields: name or SKU");
+        }
+
+        await saveProduct(product);
+        imported++;
+      } catch (e) {
+        failed++;
+        errors.push(`Row ${imported + failed + 1}: ${e.message}`);
+        console.error('Import error for row:', raw, e);
+      }
+    }
+
+    // Show comprehensive result
+    let toastMessage = `Imported ${imported} products`;
+    let toastType = "success";
+    
+    if (failed > 0) {
+      toastMessage += `, ${failed} failed`;
+      toastType = "error";
+      
+      // Log detailed errors for debugging
+      console.error('Import errors:', errors);
+      
+      // Show first few errors in toast if needed
+      if (errors.length > 0) {
+        toastMessage += `. First error: ${errors[0]}`;
+      }
+    }
+    
+    showToast(toastMessage, toastType);
+    setImportOpen(false);
+  }, [saveProduct, showToast]);
+
   /* ------------------ UI Render Helpers ------------------ */
 
   const smallStats = useMemo(() => ({
@@ -285,9 +385,46 @@ useEffect(() => {
     setPage(1);
   }, [updateFilter]);
 
+  // Add this useEffect to log state changes
+  useEffect(() => {
+    console.log('🔍 ProductManagement State:', {
+      productsCount: products.length,
+      loading,
+      error,
+      selectedIds: Array.from(selectedIds),
+      viewMode,
+      page,
+      productModalOpen,
+      importOpen
+    });
+  }, [products, loading, error, selectedIds, viewMode, page, productModalOpen, importOpen]);
+
+
+
+// Add this to your ProductManagement component
+useEffect(() => {
+  if (error) {
+    console.log('🔄 Current error state:', error);
+    console.log('📊 Products count:', products.length);
+    console.log('⏳ Loading state:', loading);
+  }
+}, [error, products, loading]);
+
+// Add this to monitor delete operations specifically
+useEffect(() => {
+  console.log('🔍 Delete operation state:', {
+    selectedIds: Array.from(selectedIds),
+    productsCount: products.length,
+    loading
+  });
+}, [selectedIds, products, loading]);
+
+
+
   /* ------------------ Render ------------------ */
 
   if (error) {
+    console.error('❌ Main component error:', error);
     return <ErrorComponent error={error} onRetry={() => window.location.reload()} />;
   }
 
@@ -376,11 +513,7 @@ useEffect(() => {
         {importOpen && (
           <ImportModal
             onClose={() => setImportOpen(false)}
-            onImport={async (file) => {
-              await new Promise(r => setTimeout(r, 1000));
-              showToast("Products imported successfully", "success");
-              setImportOpen(false);
-            }}
+            onImport={handleImport}
           />
         )}
       </AnimatePresence>

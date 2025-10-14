@@ -37,12 +37,19 @@ export const ProposalCardExtended = ({ proposal, onAction, selected, onSelect })
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div>
             <p className="text-sm text-gray-500">Total</p>
-            <p className="text-xl font-bold text-gray-900">${proposal.total.toLocaleString()}</p>
-          </div>
+         <p className="text-xl font-bold text-gray-900">
+  ${typeof proposal.total === "number" ? proposal.total.toLocaleString() : "0"}
+</p>    </div>
           <div>
             <p className="text-sm text-gray-500">Items</p>
-            <p className="text-lg font-semibold text-gray-900">{proposal.items}</p>
-          </div>
+          {Array.isArray(proposal.items) && proposal.items.length > 0 && (
+  <ul>
+    {proposal.items.slice(0, 3).map((item, idx) => (
+      <li key={item.id || idx}>{item.description || item.name || "Item"}</li>
+    ))}
+    {proposal.items.length > 3 && <li>...and more</li>}
+  </ul>
+)}       </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -60,9 +67,7 @@ export const ProposalCardExtended = ({ proposal, onAction, selected, onSelect })
             <IconButton title="Duplicate" onClick={() => onAction("duplicate", proposal)}>
               <FaCopy />
             </IconButton>
-            <IconButton title="Send" onClick={() => onAction("send", proposal)}>
-              <FaPaperPlane />
-            </IconButton>
+          
             <IconButton title="Delete" onClick={() => onAction("delete", proposal)} danger>
               <FaTrash />
             </IconButton>

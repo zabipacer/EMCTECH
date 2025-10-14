@@ -84,15 +84,7 @@ export const Controls = ({
             >
               <FaFilePdf /> Export CSV
             </button>
-            <button
-              onClick={onBulkSend}
-              className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2"
-              disabled={bulkProcessing}
-              title="Send selected"
-            >
-              {bulkProcessing ? <FaSpinner className="animate-spin" /> : <FaPaperPlane />}
-              Send Selected
-            </button>
+          
             <button
               onClick={onBulkDelete}
               className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2"

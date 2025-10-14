@@ -16,7 +16,6 @@ import {
 import { db } from "../../../firebase/firebase";
 
 // ---------- collection refs ----------
-// ---------- collection refs ----------
 const proposalsCollection = collection(db, 'proposals');
 const clientsCollection = collection(db, 'clients');
 const productsCollection = collection(db, 'products');
@@ -31,7 +30,6 @@ export const useProducts = (user) => {
   useEffect(() => {
     console.log('useProducts hook called with user:', user);
     
-    // Even if no user, try to load products (they might be public)
     try {
       const q = query(
         productsCollection,
@@ -53,7 +51,6 @@ export const useProducts = (user) => {
               } else if (data.name.EN) {
                 productName = data.name.EN;
               } else if (typeof data.name === 'object') {
-                // Get the first available language or fallback
                 productName = data.name.EN || data.name.RU || data.name.UZ || 'Unnamed Product';
               }
             }
@@ -93,7 +90,7 @@ export const useProducts = (user) => {
       setError('Failed to load products: ' + error.message);
       setLoading(false);
     }
-  }, [user]); // Keep user in dependencies but don't block if no user
+  }, [user]);
 
   return { products, loading, error };
 };
@@ -106,6 +103,7 @@ export const useClients = (user) => {
 
   useEffect(() => {
     if (!user) {
+      console.log('No user found for clients hook');
       setClients([]);
       setLoading(false);
       return;
@@ -125,6 +123,7 @@ export const useClients = (user) => {
             ...doc.data(),
             createdAt: doc.data().createdAt?.toDate()
           }));
+          console.log('Clients loaded:', clientsData);
           setClients(clientsData);
           setLoading(false);
           setError(null);
@@ -145,6 +144,11 @@ export const useClients = (user) => {
 
   const addClient = async (clientData) => {
     try {
+      // Check if user exists
+      if (!user || !user.uid) {
+        throw new Error('User must be authenticated to add a client');
+      }
+
       const clientToSave = {
         name: clientData.name || '',
         email: clientData.email || '',
@@ -159,7 +163,9 @@ export const useClients = (user) => {
         throw new Error('Client name is required');
       }
 
+      console.log('Adding client:', clientToSave);
       const docRef = await addDoc(clientsCollection, clientToSave);
+      console.log('Client added with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
       console.error('Error adding client:', error);
@@ -223,6 +229,12 @@ export const useProposals = (user) => {
 
   const addProposal = async (proposalData) => {
     try {
+      // Validate user exists
+      if (!user || !user.uid) {
+        throw new Error('User must be authenticated to add a proposal');
+      }
+
+      // Validate required fields
       if (!proposalData.clientId || !proposalData.proposalTitle) {
         throw new Error('Client and proposal title are required');
       }
@@ -232,6 +244,7 @@ export const useProposals = (user) => {
         userId: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        // Ensure products array is properly formatted
         products: proposalData.products?.map(product => ({
           id: product.id || `prod_${Date.now()}`,
           name: product.name || 'Unnamed Product',
@@ -244,7 +257,9 @@ export const useProposals = (user) => {
         })) || []
       };
 
+      console.log('Saving proposal:', proposalToSave);
       const docRef = await addDoc(proposalsCollection, proposalToSave);
+      console.log('Proposal saved with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
       console.error('Error adding proposal:', error);
@@ -252,20 +267,33 @@ export const useProposals = (user) => {
     }
   };
 
-  const updateProposal = async (proposalId, updates) => {
-    try {
-      await updateDoc(doc(proposalsCollection, proposalId), {
-        ...updates,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error('Error updating proposal:', error);
-      throw error;
+ const updateProposal = async (proposalId, updates) => {
+  try {
+    if (!user || !user.uid) {
+      throw new Error('User must be authenticated to update a proposal');
     }
-  };
+
+    // Remove undefined fields (especially expires)
+    const cleanedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([_, v]) => v !== undefined)
+    );
+
+    await updateDoc(doc(proposalsCollection, proposalId), {
+      ...cleanedUpdates,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error updating proposal:', error);
+    throw error;
+  }
+};
 
   const deleteProposal = async (proposalId) => {
     try {
+      if (!user || !user.uid) {
+        throw new Error('User must be authenticated to delete a proposal');
+      }
+
       await deleteDoc(doc(proposalsCollection, proposalId));
     } catch (error) {
       console.error('Error deleting proposal:', error);
@@ -275,6 +303,10 @@ export const useProposals = (user) => {
 
   const bulkDeleteProposals = async (proposalIds) => {
     try {
+      if (!user || !user.uid) {
+        throw new Error('User must be authenticated to delete proposals');
+      }
+
       const batch = writeBatch(db);
       proposalIds.forEach(id => {
         batch.delete(doc(proposalsCollection, id));

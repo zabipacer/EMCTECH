@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { FaFileImport, FaTimes, FaCheck } from "react-icons/fa";
 import { LoadingSpinner } from './Uicomponens';
+import Papa from "papaparse";
 
 function ImportModal({ onClose, onImport }) {
   const [file, setFile] = useState(null);
@@ -23,10 +24,23 @@ function ImportModal({ onClose, onImport }) {
     if (!file) return;
     setImporting(true);
     try {
-      await onImport(file);
+      // 1. Parse CSV file
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          const products = results.data;
+          // 2. Call onImport with parsed products
+          await onImport(products);
+          setImporting(false);
+        },
+        error: (err) => {
+          alert("Failed to parse CSV: " + err.message);
+          setImporting(false);
+        }
+      });
     } catch (error) {
       console.error("Import failed:", error);
-    } finally {
       setImporting(false);
     }
   };

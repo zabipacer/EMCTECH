@@ -135,12 +135,22 @@ export const productService = {
   }
 },
 
+// In firebaseService.js - enhance deleteMultipleProducts
 async deleteMultipleProducts(ids) {
   try {
     console.log('🗑️ Deleting multiple products:', ids);
+    
+    if (!ids || ids.length === 0) {
+      throw new Error('No product IDs provided');
+    }
+    
     const batch = writeBatch(db);
     
     ids.forEach(id => {
+      if (!id) {
+        console.warn('⚠️ Skipping invalid product ID:', id);
+        return;
+      }
       const docRef = doc(db, COLLECTIONS.PRODUCTS, id);
       batch.delete(docRef);
     });
@@ -150,6 +160,11 @@ async deleteMultipleProducts(ids) {
     return ids;
   } catch (error) {
     console.error('❌ Error deleting multiple products:', error);
+    console.error('📋 Error details:', {
+      code: error.code,
+      message: error.message,
+      stack: error.stack
+    });
     throw new Error(`Failed to delete products: ${error.message}`);
   }
 }

@@ -1,9 +1,8 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
+import { FaCheck, FaExclamationTriangle, FaInfo, FaTimes } from "react-icons/fa";
 import { motion } from "framer-motion";
-import { FaCheck, FaTimes, FaExclamationTriangle } from "react-icons/fa";
-import { FaInfo } from './Uicomponens';
-
-function Toast({ message, type = "info", onClose }) {
+// Make sure your Toast component is working properly
+ function Toast({ message, type = "info", onClose }) {
   useEffect(() => {
     const timer = setTimeout(onClose, 5000);
     return () => clearTimeout(timer);

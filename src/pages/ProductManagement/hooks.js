@@ -22,6 +22,41 @@ export function useProducts() {
       setLoading(false);
     }
   }, []);
+// In your useProducts hook - fix the deleteProducts function
+const deleteProducts = useCallback(async (ids) => {
+  setLoading(true);
+  setError(null);
+  try {
+    console.log('🗑️ Deleting products from Firebase:', ids);
+    
+    if (!ids || ids.length === 0) {
+      throw new Error('No product IDs provided for deletion');
+    }
+    
+    // Delete products from Firestore
+    await productService.deleteMultipleProducts(ids);
+    
+    console.log('✅ Products deleted successfully from Firebase');
+    
+    // Update local state immediately for better UX
+    setProducts(prevProducts => prevProducts.filter(p => !ids.includes(p.id)));
+    
+    return ids;
+  } catch (err) {
+    console.error('❌ Error in deleteProducts:', err);
+    const errorMessage = err.message || 'Failed to delete products';
+    setError(errorMessage);
+    
+    // Re-throw the error so the calling code can handle it
+    throw new Error(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+}, []); // Remove refreshProducts dependency since we update locally
+
+
+
+
 
  const saveProduct = useCallback(async (product, imageFile = null) => {
   setLoading(true);
@@ -70,33 +105,7 @@ export function useProducts() {
     setLoading(false);
   }
 }, [refreshProducts]);
- const deleteProducts = useCallback(async (ids) => {
-  setLoading(true);
-  setError(null); // Clear any previous errors
-  try {
-    console.log('🗑️ Deleting products from Firebase:', ids);
-    
-    if (!ids || ids.length === 0) {
-      throw new Error('No product IDs provided for deletion');
-    }
-    
-    // Delete products from Firestore
-    await productService.deleteMultipleProducts(ids);
-    
-    console.log('✅ Products deleted successfully from Firebase');
-    
-    // Refresh the list
-    await refreshProducts();
-    return ids;
-  } catch (err) {
-    console.error('❌ Error in deleteProducts:', err);
-    const errorMessage = err.message || 'Failed to delete products';
-    setError(errorMessage);
-    throw err;
-  } finally {
-    setLoading(false);
-  }
-}, [refreshProducts]);
+ 
 
   useEffect(() => {
     refreshProducts();
