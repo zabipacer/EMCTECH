@@ -1216,12 +1216,157 @@ const PDFPreviewModal = ({
   onClose, 
   proposal, 
   selectedProducts, 
+  rfqItems,
   subtotal, 
   totalDiscount, 
   taxAmount, 
   grandTotal, 
   formatCurrency 
 }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    try {
+      setIsGenerating(true);
+      
+      const pdfData = {
+        ...proposal,
+        products: selectedProducts,
+        rfqItems: rfqItems,
+        selectedProducts: selectedProducts,
+        items: rfqItems,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        grandTotal,
+        templateType: proposal.templateType,
+        formatCurrency
+      };
+
+      if (proposal.templateType === 'technical-rfq') {
+        await downloadTechnicalRFQPdf(pdfData);
+      } else {
+        await downloadProposalPdf(pdfData);
+      }
+      
+      showToast('PDF downloaded successfully!', 'success');
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      showToast('Error generating PDF. Please try again.', 'error');
+      // Fallback to print
+      handlePrint();
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handlePrint = () => {
+    const printContent = document.getElementById('pdf-preview-content');
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${proposal.templateType === 'technical-rfq' ? 'Technical RFQ' : 'Proposal'} ${proposal.proposalNumber}</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 20px;
+              color: #333;
+              font-size: 12px;
+            }
+            .header { 
+              border-bottom: 2px solid #003366; 
+              padding-bottom: 20px; 
+              margin-bottom: 20px;
+            }
+            .company-info h1 { 
+              margin: 0; 
+              color: #003366;
+              font-size: 16px;
+              font-weight: bold;
+            }
+            .proposal-info { 
+              background: #f8f8f8; 
+              padding: 15px; 
+              border-radius: 5px;
+              border: 1px solid #ddd;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin: 20px 0;
+              font-size: 10px;
+            }
+            th, td { 
+              border: 1px solid #808080; 
+              padding: 6px; 
+              text-align: left;
+              vertical-align: top;
+            }
+            th { 
+              background-color: #e8e8e8; 
+              color: #000;
+              font-weight: bold;
+              text-align: center;
+            }
+            .technical-item { 
+              border: 1px solid #808080; 
+              margin: 10px 0; 
+              padding: 10px;
+              background: #f9f9f9;
+            }
+            .technical-item h4 {
+              margin: 0 0 8px 0;
+              color: #003366;
+              font-size: 11px;
+              text-transform: uppercase;
+            }
+            .signature-section {
+              margin-top: 40px;
+              border-top: 1px solid #808080;
+              padding-top: 20px;
+            }
+            .notes-section {
+              margin: 20px 0;
+              padding: 10px;
+              background: #f8f8f8;
+              border-left: 3px solid #003366;
+            }
+            .summary-table {
+              width: 300px;
+              margin-left: auto;
+              border: 1px solid #ddd;
+            }
+            .summary-table td {
+              padding: 8px;
+              border-bottom: 1px solid #eee;
+            }
+            .summary-table tr:last-child td {
+              border-bottom: none;
+              font-weight: bold;
+              background: #f5f5f5;
+            }
+            @media print {
+              body { margin: 10mm; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent.innerHTML}
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.onafterprint = () => printWindow.close();
+  };
+
   if (!open) return null;
 
   return (
@@ -1233,139 +1378,401 @@ const PDFPreviewModal = ({
       onClick={onClose}
     >
       <motion.div
-        className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-screen overflow-hidden flex flex-col"
+        className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-screen overflow-hidden flex flex-col"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
+        style={{ minHeight: '90vh' }}
       >
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-xl font-semibold text-gray-900">PDF Preview</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition duration-200"
-          >
-            <FaTimes size={20} />
-          </button>
+        <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+          <h3 className="text-xl font-semibold text-gray-900 flex items-center">
+            <FaFilePdf className="mr-2 text-red-500" /> 
+            {proposal.templateType === 'technical-rfq' ? 'Technical RFQ Preview' : 'Proposal PDF Preview'}
+          </h3>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600 bg-blue-100 px-2 py-1 rounded">
+              {proposal.templateType === 'technical-rfq' ? 'Technical RFQ' : 'Simple Proposal'}
+            </span>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition duration-200"
+            >
+              <FaTimes size={20} />
+            </button>
+          </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="bg-white border border-gray-300 p-8 max-w-4xl mx-auto">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900">{proposal.company}</h1>
-              <p className="text-gray-600">PROPOSAL</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-8 mb-8">
-              <div>
-                <h2 className="text-lg font-semibold mb-2">From:</h2>
-                <p>{proposal.company}</p>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold mb-2">To:</h2>
-                <p>{proposal.clientName}</p>
-                <p>{proposal.clientEmail}</p>
-              </div>
-            </div>
-            
-            <div className="mb-8">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">{proposal.proposalTitle}</h2>
-                <div className="text-right">
-                  <p><strong>Proposal #:</strong> {proposal.proposalNumber}</p>
-                  <p><strong>Date:</strong> {proposal.proposalDate}</p>
-                  <p><strong>Valid Until:</strong> {proposal.validUntil}</p>
-                </div>
-              </div>
-            </div>
-            
-            <table className="w-full mb-8">
-              <thead>
-                <tr className="border-b-2 border-gray-300">
-                  <th className="text-left py-2">Item</th>
-                  <th className="text-right py-2">Qty</th>
-                  <th className="text-right py-2">Price</th>
-                  <th className="text-right py-2">Discount</th>
-                  <th className="text-right py-2">Tax</th>
-                  <th className="text-right py-2">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedProducts.map((product) => (
-                  <tr key={product.id} className="border-b border-gray-200">
-                    <td className="py-3">
-                      <div className="font-medium">{product.name}</div>
-                      <div className="text-sm text-gray-600">{product.category}</div>
-                    </td>
-                    <td className="text-right py-3">{product.quantity}</td>
-                    <td className="text-right py-3">{formatCurrency(product.unitPrice)}</td>
-                    <td className="text-right py-3">{product.discount}%</td>
-                    <td className="text-right py-3">{product.taxable ? "Yes" : "No"}</td>
-                    <td className="text-right py-3 font-medium">{formatCurrency(product.lineTotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            <div className="flex justify-end mb-8">
-              <div className="w-64">
-                <div className="flex justify-between py-2">
-                  <span>Subtotal:</span>
-                  <span>{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between py-2 text-red-600">
-                  <span>Discounts:</span>
-                  <span>-{formatCurrency(totalDiscount)}</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span>Tax ({proposal.taxRate}%):</span>
-                  <span>{formatCurrency(taxAmount)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-t border-gray-300 font-bold text-lg">
-                  <span>Grand Total:</span>
-                  <span>{formatCurrency(grandTotal)}</span>
-                </div>
-              </div>
-            </div>
-            
-            {proposal.terms && (
-              <div className="mb-6">
-                <h3 className="font-semibold mb-2">Terms & Conditions</h3>
-                <p className="text-gray-700 whitespace-pre-wrap">{proposal.terms}</p>
-              </div>
-            )}
-            
-            {proposal.notes && (
-              <div>
-                <h3 className="font-semibold mb-2">Notes</h3>
-                <p className="text-gray-700 whitespace-pre-wrap">{proposal.notes}</p>
-              </div>
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+          <div id="pdf-preview-content" className="bg-white border border-gray-300 p-8 max-w-6xl mx-auto shadow-lg" style={{ fontSize: '12px' }}>
+            {proposal.templateType === 'technical-rfq' ? (
+              <TechnicalRFQPreviewContent 
+                proposal={proposal}
+                rfqItems={rfqItems}
+                formatCurrency={formatCurrency}
+              />
+            ) : (
+              <SimpleProposalPreviewContent
+                proposal={proposal}
+                selectedProducts={selectedProducts}
+                subtotal={subtotal}
+                totalDiscount={totalDiscount}
+                taxAmount={taxAmount}
+                grandTotal={grandTotal}
+                formatCurrency={formatCurrency}
+              />
             )}
           </div>
         </div>
         
-        <div className="p-6 border-t border-gray-200 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 mr-3"
-          >
-            Close
-          </button>
-          <button
-            onClick={() => {
-              alert("PDF generated and downloaded successfully!");
-              onClose();
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200"
-          >
-            Download PDF
-          </button>
+        <div className="p-6 border-t border-gray-200 flex justify-between items-center bg-white">
+          <div className="text-sm text-gray-600 flex items-center">
+            <FaExclamationTriangle className="mr-2 text-yellow-500" />
+            Preview may differ slightly from actual PDF
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-medium"
+            >
+              Close
+            </button>
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200 flex items-center font-medium"
+            >
+              <FaFilePdf className="mr-2" /> Print
+            </button>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={isGenerating}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGenerating ? (
+                <>
+                  <FaSpinner className="mr-2 animate-spin" /> Generating...
+                </>
+              ) : (
+                <>
+                  <FaDownload className="mr-2" /> Download PDF
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
   );
 };
 
+// Technical RFQ Preview Component
+const TechnicalRFQPreviewContent = ({ proposal, rfqItems, formatCurrency }) => {
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return new Date().toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>
+      {/* Header */}
+      <div className="header">
+        <div style={{ marginBottom: '10px' }}>
+          <h1 style={{ margin: 0, color: '#003366', fontSize: '14px', fontWeight: 'bold' }}>
+            {proposal.companyDetails?.name || proposal.company}
+          </h1>
+          <div style={{ fontSize: '9px', lineHeight: '1.3' }}>
+            <div>{proposal.companyDetails?.address}</div>
+            <div>Phone: {proposal.companyDetails?.phone}</div>
+            <div>Email: {proposal.companyDetails?.email}</div>
+            <div>Bank Account: {proposal.companyDetails?.bankAccount}</div>
+            <div>MFO: {proposal.companyDetails?.mfo}</div>
+            <div>Tax ID: {proposal.companyDetails?.taxId}</div>
+            <div>OKED: {proposal.companyDetails?.oked}</div>
+          </div>
+        </div>
+        
+        <div style={{ textAlign: 'center', margin: '15px 0' }}>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#003366' }}>№{proposal.documentNumber}</div>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#003366', marginTop: '5px' }}>COMMERCIAL OFFER</div>
+        </div>
+        
+        <div style={{ fontSize: '10px' }}>
+          <div>Date: {formatDisplayDate(proposal.proposalDate)}</div>
+          <div>To: {proposal.clientName}</div>
+        </div>
+      </div>
+
+      {/* Technical Items Table */}
+      {rfqItems.length > 0 && (
+        <div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
+            <thead>
+              <tr>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '5%' }}>№</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Technical Description of Requested Item</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '25%' }}>Material PO Text</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '8%' }}>Unit</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '10%' }}>Quantity Requested</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Technical Description</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Will be Supplied</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Will be Supplied</th>
+                <th style={{ border: '1px solid #808080', padding: '4px', width: '15%' }}>PHOTO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rfqItems.map((item, index) => (
+                <tr key={item.id}>
+                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center', fontWeight: 'bold' }}>
+                    {index + 1}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    {item.description}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
+                    {item.technicalDescription}
+                    {item.manufacturer && `; OEM/MAKE: ${item.manufacturer}`}
+                    {item.partNumber && `; Part No: ${item.partNumber}`}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
+                    {item.unit}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
+                    {item.quantity}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
+                    {item.willBeSupplied}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px', fontSize: '8px' }}>
+                    {item.specifications && item.specifications.filter(spec => spec.trim()).map((spec, idx) => (
+                      <div key={idx}>{idx + 1}. {spec}</div>
+                    ))}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
+                    {item.willBeSupplied}
+                  </td>
+                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
+                    {item.imageUrl && (
+                      <img 
+                        src={item.imageUrl} 
+                        alt={item.description}
+                        style={{ maxWidth: '100%', maxHeight: '50px', objectFit: 'contain' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Notes Section */}
+      <div className="notes-section">
+        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>NOTES:</div>
+        <div style={{ fontSize: '10px' }}>
+          <div>1. Terms of payment: {proposal.deliveryTerms?.paymentTerms}</div>
+          <div>2. Estimated delivery time: {proposal.deliveryTerms?.deliveryTime}</div>
+          <div>3. Terms of delivery: {proposal.deliveryTerms?.incoterms}</div>
+        </div>
+      </div>
+
+      {/* Signature Section */}
+      <div className="signature-section">
+        <div style={{ marginBottom: '30px' }}>
+          <div>{proposal.authorizedSignatory?.title}</div>
+          <div style={{ borderTop: '1px solid #000', width: '200px', marginTop: '20px', paddingTop: '5px' }}>
+            {proposal.authorizedSignatory?.name}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: '40px', fontSize: '8px', color: '#666', textAlign: 'center', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
+        <div>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</div>
+        <div>Document ID: {proposal.proposalNumber}</div>
+      </div>
+    </div>
+  );
+};
+
+// Simple Proposal Preview Component
+const SimpleProposalPreviewContent = ({ proposal, selectedProducts, subtotal, totalDiscount, taxAmount, grandTotal, formatCurrency }) => {
+  const formatDisplayDate = (dateString) => {
+    if (!dateString) return new Date().toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>
+      {/* Header */}
+      <div style={{ borderBottom: '2px solid #2d5aa0', paddingBottom: '20px', marginBottom: '20px' }}>
+        <div style={{ backgroundColor: '#2d5aa0', color: 'white', padding: '20px', margin: '-32px -32px 20px -32px' }}>
+          <h1 style={{ margin: 0, fontSize: '24px', textAlign: 'center' }}>PROPOSAL</h1>
+          <div style={{ textAlign: 'center', marginTop: '10px' }}>
+            <div style={{ fontSize: '14px' }}>Proposal #: {proposal.proposalNumber}</div>
+            <div style={{ fontSize: '12px' }}>Date: {formatDisplayDate(proposal.proposalDate)}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#2d5aa0' }}>From:</h3>
+            <div style={{ fontSize: '11px' }}>
+              <div><strong>{proposal.company}</strong></div>
+              {proposal.companyDetails?.address && <div>{proposal.companyDetails.address}</div>}
+              {proposal.companyDetails?.phone && <div>Phone: {proposal.companyDetails.phone}</div>}
+              {proposal.companyDetails?.email && <div>Email: {proposal.companyDetails.email}</div>}
+            </div>
+          </div>
+          
+          <div>
+            <h3 style={{ margin: '0 0 10px 0', color: '#2d5aa0' }}>To:</h3>
+            <div style={{ fontSize: '11px' }}>
+              <div><strong>{proposal.clientName}</strong></div>
+              {proposal.clientEmail && <div>Email: {proposal.clientEmail}</div>}
+            </div>
+          </div>
+        </div>
+
+        {proposal.proposalTitle && (
+          <div style={{ textAlign: 'center', marginTop: '20px', padding: '15px', backgroundColor: '#e8f4ff', borderRadius: '5px' }}>
+            <h2 style={{ margin: 0, color: '#2d5aa0', fontSize: '18px' }}>{proposal.proposalTitle}</h2>
+          </div>
+        )}
+
+        {proposal.validUntil && (
+          <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '11px', color: '#666' }}>
+            Valid Until: {formatDisplayDate(proposal.validUntil)}
+          </div>
+        )}
+      </div>
+
+      {/* Products Table */}
+      {selectedProducts.length > 0 && (
+        <div style={{ marginBottom: '30px' }}>
+          <h3 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>PROPOSAL ITEMS</h3>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#2d5aa0', color: 'white' }}>
+                <th style={{ padding: '8px', textAlign: 'left', border: '1px solid #1e3d6d' }}>Item Description</th>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '8%' }}>Qty</th>
+                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid #1e3d6d', width: '12%' }}>Unit Price</th>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '10%' }}>Disc. %</th>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '8%' }}>Tax</th>
+                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid #1e3d6d', width: '12%' }}>Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedProducts.map((product, index) => (
+                <tr key={product.id} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white' }}>
+                  <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                    <div style={{ fontWeight: 'bold' }}>{product.name}</div>
+                    {product.category && (
+                      <div style={{ fontSize: '9px', color: '#666' }}>{product.category}</div>
+                    )}
+                    {product.imageUrl && (
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.name}
+                        style={{ maxWidth: '50px', maxHeight: '50px', marginTop: '5px', objectFit: 'contain' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.quantity}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #ddd' }}>{formatCurrency(product.unitPrice)}</td>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.discount}%</td>
+                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.taxable ? 'Yes' : 'No'}</td>
+                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #ddd', fontWeight: 'bold' }}>
+                    {formatCurrency(product.lineTotal)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Summary Section */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
+        <table className="summary-table">
+          <tbody>
+            <tr>
+              <td>Subtotal:</td>
+              <td style={{ textAlign: 'right' }}>{formatCurrency(subtotal)}</td>
+            </tr>
+            <tr>
+              <td>Discounts:</td>
+              <td style={{ textAlign: 'right', color: '#d00' }}>-{formatCurrency(totalDiscount)}</td>
+            </tr>
+            <tr>
+              <td>Tax ({proposal.taxRate}%):</td>
+              <td style={{ textAlign: 'right' }}>{formatCurrency(taxAmount)}</td>
+            </tr>
+            <tr>
+              <td style={{ borderTop: '2px solid #2d5aa0', fontWeight: 'bold' }}>Grand Total:</td>
+              <td style={{ borderTop: '2px solid #2d5aa0', textAlign: 'right', fontWeight: 'bold', color: '#2d5aa0' }}>
+                {formatCurrency(grandTotal)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Terms and Notes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
+        {proposal.terms && (
+          <div>
+            <h4 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Terms & Conditions</h4>
+            <div style={{ fontSize: '10px', lineHeight: '1.4' }}>
+              {proposal.terms.split('\n').map((line, index) => (
+                <div key={index}>{line}</div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {proposal.notes && (
+          <div>
+            <h4 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Additional Notes</h4>
+            <div style={{ fontSize: '10px', lineHeight: '1.4' }}>
+              {proposal.notes.split('\n').map((line, index) => (
+                <div key={index}>{line}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: '40px', fontSize: '8px', color: '#666', textAlign: 'center', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
+        <div>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</div>
+        <div>Proposal ID: {proposal.proposalNumber} | Status: {proposal.status}</div>
+      </div>
+    </div>
+  );
+};
 const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onSendProposal }) => {
   if (!open) return null;
 

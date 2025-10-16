@@ -2,6 +2,24 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+// Helper function to load and convert image to base64
+const loadImage = (url) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+};
+
 export async function downloadTechnicalRFQPdf(proposal) {
   const doc = new jsPDF('p', 'mm', 'a4');
   
@@ -46,7 +64,7 @@ export async function downloadTechnicalRFQPdf(proposal) {
     templateType: proposal.templateType || 'technical-rfq',
     documentNumber: proposal.documentNumber || proposal.proposalNumber || '1/1',
     date: proposal.date || proposal.proposalDate || new Date().toISOString().split('T')[0],
-    client: proposal.client || 'Client Name',
+    client: proposal.client || proposal.clientName || 'Client Name',
     
     companyDetails: {
       name: proposal.companyDetails?.name || proposal.company || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»',
@@ -59,7 +77,7 @@ export async function downloadTechnicalRFQPdf(proposal) {
       oked: proposal.companyDetails?.oked || '43299'
     },
     
-    items: proposal.items || proposal.products || [],
+    items: proposal.items || proposal.products || proposal.rfqItems || [],
     
     deliveryTerms: {
       paymentTerms: proposal.deliveryTerms?.paymentTerms || proposal.paymentTerms || '50% prepayment',
@@ -126,21 +144,8 @@ export async function downloadTechnicalRFQPdf(proposal) {
   // ========== TECHNICAL ITEMS TABLE ==========
   
   if (data.items && data.items.length > 0) {
-    // Table headers
-    const headers = [
-      '№',
-      'Technical Description of Requested Item',
-      'Material PO Text',
-      'Unit',
-      'Quantity Requested',
-      'Technical Description',
-      'Will be Supplied',
-      'Will be Supplied',
-      'PHOTO'
-    ];
-
-    // Prepare table data
-    const tableData = data.items.map((item, index) => {
+    // Prepare table data with image support
+    const tableData = await Promise.all(data.items.map(async (item, index) => {
       // Transform product data to RFQ format
       const description = item.description || item.name || '';
       const technicalDescription = item.technicalDescription || item.description || '';
@@ -154,24 +159,55 @@ export async function downloadTechnicalRFQPdf(proposal) {
         ? item.specifications.map((spec, idx) => `${idx + 1}. ${spec}`).join('\n')
         : (item.specs ? item.specs.map((spec, idx) => `${idx + 1}. ${spec}`).join('\n') : '');
 
-      return [
-        (index + 1).toString(),
-        description.toUpperCase(),
-        `${technicalDescription}${manufacturer ? `; OEM/MAKE: ${manufacturer}` : ''}`,
-        unit,
-        quantity.toString(),
-        willBeSupplied,
-        specificationsText,
-        willBeSupplied, // Second column, can be different data if needed
-        '' // Photo placeholder
-      ];
-    });
+      // Handle product images
+      let imageData = null;
+      if (item.imageUrl || item.image) {
+        try {
+          const imageUrl = item.imageUrl || item.image;
+          imageData = await loadImage(imageUrl);
+        } catch (error) {
+          console.warn('Failed to load image:', error);
+          imageData = null;
+        }
+      }
+
+      return {
+        row: [
+          (index + 1).toString(),
+          description.toUpperCase(),
+          `${technicalDescription}${manufacturer ? `; OEM/MAKE: ${manufacturer}` : ''}`,
+          unit,
+          quantity.toString(),
+          willBeSupplied,
+          specificationsText,
+          willBeSupplied,
+          imageData ? 'IMAGE' : '' // Photo placeholder
+        ],
+        image: imageData
+      };
+    }));
+
+    // Extract just the row data for the table
+    const tableRows = tableData.map(item => item.row);
+
+    // Table headers
+    const headers = [
+      '№',
+      'Technical Description of Requested Item',
+      'Material PO Text',
+      'Unit',
+      'Quantity Requested',
+      'Technical Description',
+      'Will be Supplied',
+      'Will be Supplied',
+      'PHOTO'
+    ];
 
     // Create the table
     autoTable(doc, {
       startY: currentY,
       head: [headers],
-      body: tableData,
+      body: tableRows,
       theme: 'grid',
       headStyles: {
         fillColor: lightGray,
@@ -213,6 +249,33 @@ export async function downloadTechnicalRFQPdf(proposal) {
         // Add borders to all cells
         data.cell.styles.lineColor = borderGray;
         data.cell.styles.lineWidth = 0.1;
+        
+        // Add images to photo column
+        if (data.column.index === 8 && data.cell.raw === 'IMAGE') {
+          const itemIndex = data.row.index;
+          const imageData = tableData[itemIndex].image;
+          if (imageData) {
+            // Add image to the cell
+            try {
+              doc.addImage(
+                imageData,
+                'JPEG',
+                data.cell.x + 2,
+                data.cell.y + 2,
+                data.cell.width - 4,
+                data.cell.height - 4
+              );
+            } catch (error) {
+              console.warn('Failed to add image to PDF:', error);
+            }
+          }
+        }
+      },
+      didDrawCell: function(data) {
+        // Handle image cells
+        if (data.column.index === 8 && data.cell.raw === 'IMAGE') {
+          // Image is already added in didParseCell
+        }
       }
     });
 

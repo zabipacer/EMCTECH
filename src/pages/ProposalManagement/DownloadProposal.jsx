@@ -1,20 +1,31 @@
+// src/components/DownloadProposal.js
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadTechnicalRFQPdf } from "./DownloadTechnicalRFQ";
 
-export async function downloadProposalPdf(proposal) {
-   if (proposal.templateType === 'technical-rfq') {
-    return await downloadTechnicalRFQPdf(proposal);
+export async function downloadProposalPdf(proposalData) {
+  // Handle Technical RFQ separately
+  if (proposalData.templateType === 'technical-rfq') {
+    return await downloadTechnicalRFQPdf(proposalData);
   }
 
-
+  // Simple Proposal PDF Generation
   const doc = new jsPDF();
   
   // Set default values for missing fields
-  const proposalData = {
+  const proposal = proposalData.proposal || proposalData;
+  const products = proposalData.products || proposalData.selectedProducts || [];
+  const formatCurrency = proposalData.formatCurrency || ((amount) => 
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount || 0)
+  );
+
+  const proposalDataFormatted = {
     proposalNumber: proposal.proposalNumber || `PROP-${Date.now()}`,
     proposalTitle: proposal.proposalTitle || 'Proposal',
-    client: proposal.client || 'N/A',
+    client: proposal.clientName || proposal.client || 'N/A',
     company: proposal.company || 'N/A',
     clientEmail: proposal.clientEmail || proposal.email || '',
     clientPhone: proposal.clientPhone || proposal.phone || '',
@@ -23,21 +34,12 @@ export async function downloadProposalPdf(proposal) {
     terms: proposal.terms || '',
     notes: proposal.notes || '',
     status: proposal.status || 'draft',
-    subtotal: proposal.subtotal || 0,
-    totalDiscount: proposal.totalDiscount || 0,
-    taxAmount: proposal.taxAmount || 0,
-    taxRate: proposal.taxRate || 0,
-    grandTotal: proposal.grandTotal || proposal.total || 0,
-    products: proposal.products || []
-  };
-
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount || 0);
+    subtotal: proposalData.subtotal || proposal.subtotal || 0,
+    totalDiscount: proposalData.totalDiscount || proposal.totalDiscount || 0,
+    taxAmount: proposalData.taxAmount || proposal.taxAmount || 0,
+    taxRate: proposal.taxRate || proposal.taxRate || 0,
+    grandTotal: proposalData.grandTotal || proposal.grandTotal || proposal.total || 0,
+    products: products
   };
 
   // Format date
@@ -68,19 +70,19 @@ export async function downloadProposalPdf(proposal) {
   
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Proposal #: ${proposalData.proposalNumber}`, 105, 25, { align: 'center' });
+  doc.text(`Proposal #: ${proposalDataFormatted.proposalNumber}`, 105, 25, { align: 'center' });
   
   doc.setFontSize(10);
-  doc.text(`Date: ${formatDate(proposalData.proposalDate)}`, 105, 32, { align: 'center' });
+  doc.text(`Date: ${formatDate(proposalDataFormatted.proposalDate)}`, 105, 32, { align: 'center' });
 
   yPosition = 50;
 
   // Proposal Title
-  if (proposalData.proposalTitle) {
+  if (proposalDataFormatted.proposalTitle) {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text(proposalData.proposalTitle, 20, yPosition);
+    doc.text(proposalDataFormatted.proposalTitle, 20, yPosition);
     yPosition += 10;
   }
 
@@ -89,10 +91,10 @@ export async function downloadProposalPdf(proposal) {
   doc.setFont('helvetica', 'normal');
   
   const clientInfo = [
-    `Client: ${proposalData.client}`,
-    `Company: ${proposalData.company}`,
-    ...(proposalData.clientEmail ? [`Email: ${proposalData.clientEmail}`] : []),
-    ...(proposalData.clientPhone ? [`Phone: ${proposalData.clientPhone}`] : [])
+    `Client: ${proposalDataFormatted.client}`,
+    `Company: ${proposalDataFormatted.company}`,
+    ...(proposalDataFormatted.clientEmail ? [`Email: ${proposalDataFormatted.clientEmail}`] : []),
+    ...(proposalDataFormatted.clientPhone ? [`Phone: ${proposalDataFormatted.clientPhone}`] : [])
   ];
 
   clientInfo.forEach((line, index) => {
@@ -101,8 +103,8 @@ export async function downloadProposalPdf(proposal) {
 
   // Proposal Details (right side)
   const proposalDetails = [
-    `Status: ${proposalData.status.toUpperCase()}`,
-    ...(proposalData.validUntil ? [`Valid Until: ${formatDate(proposalData.validUntil)}`] : [])
+    `Status: ${proposalDataFormatted.status.toUpperCase()}`,
+    ...(proposalDataFormatted.validUntil ? [`Valid Until: ${formatDate(proposalDataFormatted.validUntil)}`] : [])
   ];
 
   proposalDetails.forEach((line, index) => {
@@ -117,7 +119,7 @@ export async function downloadProposalPdf(proposal) {
   yPosition += 15;
 
   // Products/Services Table
-  if (proposalData.products && proposalData.products.length > 0) {
+  if (proposalDataFormatted.products && proposalDataFormatted.products.length > 0) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('PROPOSAL ITEMS', 20, yPosition);
@@ -127,7 +129,7 @@ export async function downloadProposalPdf(proposal) {
       ['Description', 'Quantity', 'Unit Price', 'Discount %', 'Tax', 'Line Total']
     ];
 
-    const tableData = proposalData.products.map(product => [
+    const tableData = proposalDataFormatted.products.map(product => [
       product.name || 'Unnamed Item',
       product.quantity?.toString() || '1',
       formatCurrency(product.unitPrice || product.price || 0),
@@ -170,10 +172,10 @@ export async function downloadProposalPdf(proposal) {
   yPosition += 15;
 
   const summaryData = [
-    ['Subtotal:', formatCurrency(proposalData.subtotal)],
-    ['Discount:', `-${formatCurrency(proposalData.totalDiscount)}`],
-    [`Tax (${proposalData.taxRate}%):`, formatCurrency(proposalData.taxAmount)],
-    ['Grand Total:', formatCurrency(proposalData.grandTotal)]
+    ['Subtotal:', formatCurrency(proposalDataFormatted.subtotal)],
+    ['Discount:', `-${formatCurrency(proposalDataFormatted.totalDiscount)}`],
+    [`Tax (${proposalDataFormatted.taxRate}%):`, formatCurrency(proposalDataFormatted.taxAmount)],
+    ['Grand Total:', formatCurrency(proposalDataFormatted.grandTotal)]
   ];
 
   autoTable(doc, {
@@ -200,7 +202,7 @@ export async function downloadProposalPdf(proposal) {
   yPosition = doc.lastAutoTable.finalY + 15;
 
   // Notes Section
-  if (proposalData.notes) {
+  if (proposalDataFormatted.notes) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('NOTES', 20, yPosition);
@@ -208,13 +210,13 @@ export async function downloadProposalPdf(proposal) {
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const splitNotes = doc.splitTextToSize(proposalData.notes, 170);
+    const splitNotes = doc.splitTextToSize(proposalDataFormatted.notes, 170);
     doc.text(splitNotes, 20, yPosition);
     yPosition += splitNotes.length * 5 + 10;
   }
 
   // Terms Section
-  if (proposalData.terms) {
+  if (proposalDataFormatted.terms) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('TERMS & CONDITIONS', 20, yPosition);
@@ -222,7 +224,7 @@ export async function downloadProposalPdf(proposal) {
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    const splitTerms = doc.splitTextToSize(proposalData.terms, 170);
+    const splitTerms = doc.splitTextToSize(proposalDataFormatted.terms, 170);
     doc.text(splitTerms, 20, yPosition);
     yPosition += splitTerms.length * 5 + 10;
   }
@@ -235,9 +237,18 @@ export async function downloadProposalPdf(proposal) {
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   doc.text(`Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`, 105, footerY + 5, { align: 'center' });
-  doc.text(`Proposal ID: ${proposalData.proposalNumber} | Status: ${proposalData.status}`, 105, footerY + 10, { align: 'center' });
+  doc.text(`Proposal ID: ${proposalDataFormatted.proposalNumber} | Status: ${proposalDataFormatted.status}`, 105, footerY + 10, { align: 'center' });
 
   // Save the PDF
-  const fileName = `${proposalData.proposalNumber}-proposal.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const fileName = `${proposalDataFormatted.proposalNumber}-proposal.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_');
   doc.save(fileName);
+}
+
+// Enhanced version with image support
+export async function downloadProposalPdfWithImages(proposalData) {
+  if (proposalData.templateType === 'technical-rfq') {
+    return await downloadTechnicalRFQPdf(proposalData);
+  }
+  
+  return await downloadProposalPdf(proposalData);
 }

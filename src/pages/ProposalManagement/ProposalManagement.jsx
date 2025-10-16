@@ -660,12 +660,7 @@ const ProposalManagement = ({ user }) => {
           )}
 
           {/* Debug Info - Remove in production */}
-          <DebugInfo 
-            proposals={proposals}
-            clients={clients}
-            products={products}
-            errors={errors}
-          />
+        
         </>
       )}
     </div>
