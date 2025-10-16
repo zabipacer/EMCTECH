@@ -5,7 +5,8 @@ import {
   FaChevronDown, FaChevronUp, FaEdit, FaCopy, FaSave,
   FaPaperPlane, FaHistory, FaBuilding, FaFileAlt,
   FaCheck, FaExclamationTriangle, FaPercent, FaReceipt,
-  FaSpinner, FaEye
+  FaSpinner, FaEye,
+  FaDownload
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 

@@ -25,6 +25,7 @@ import DebugInfo from './DebugInfo';
 import { downloadProposalPdf } from './DownloadProposal';
 
 const ProposalManagement = ({ user }) => {
+  const [isLoading, setIsLoading] = useState(false);
   // Error handling state
   const [errors, setErrors] = useState({
     proposals: null,
@@ -363,16 +364,20 @@ const ProposalManagement = ({ user }) => {
   };
 
   /* ---------------------- Create/Edit Proposal Handlers ----------------------- */
-  const handleSaveNewProposal = async (newProposal) => {
-    try {
-      await addProposal(newProposal);
-      setCreateProposalModalOpen(false);
-      showToast('Proposal created successfully', 'success');
-    } catch (error) {
-      console.error('Error creating proposal:', error);
-      showToast(`Error creating proposal: ${error.message}`, 'error');
-    }
-  };
+ // In ProposalManagement.jsx - make sure this exists
+const handleSaveNewProposal = async (proposalData) => {
+  try {
+    setIsLoading(true);
+    await addProposal(proposalData);
+    setToast({ message: 'Proposal created successfully!', type: 'success' });
+    setCreateProposalModalOpen(false); // <-- FIXED
+  } catch (error) {
+    console.error('Error saving proposal:', error);
+    setToast({ message: `Error saving proposal: ${error.message}`, type: 'error' });
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleSaveEditedProposal = async (updatedProposal) => {
     try {

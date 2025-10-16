@@ -507,93 +507,132 @@ const CreateProposalModal = ({
   };
 
   // Save proposal
-  const handleSaveProposal = async (status = 'draft') => {
-    // Validate based on template type
-    if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
-      showToast('Please add at least one product to the proposal', 'error');
-      return;
+ // Save proposal - FIXED VERSION
+const handleSaveProposal = async (status = 'draft') => {
+  // Validate based on template type
+  if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
+    showToast('Please add at least one product to the proposal', 'error');
+    return;
+  }
+
+  if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
+    showToast('Please add at least one technical item to the proposal', 'error');
+    return;
+  }
+
+  if (!proposal.clientId) {
+    showToast('Please select a client for the proposal', 'error');
+    return;
+  }
+
+  if (!proposal.proposalTitle) {
+    showToast('Please enter a proposal title', 'error');
+    return;
+  }
+
+  try {
+    let proposalData;
+
+    if (proposal.templateType === 'technical-rfq') {
+      // Technical RFQ data structure - FIXED
+      proposalData = {
+        clientId: proposal.clientId, // ADDED: This is required by Firebase hook
+        proposalTitle: proposal.proposalTitle, // ADDED: This is required by Firebase hook
+        proposalNumber: proposal.proposalNumber,
+        clientName: proposal.clientName,
+        clientEmail: proposal.clientEmail,
+        company: proposal.company,
+        proposalDate: proposal.proposalDate,
+        validUntil: proposal.validUntil,
+        terms: proposal.terms,
+        notes: proposal.notes,
+        taxRate: proposal.taxRate,
+        status: status,
+        templateType: proposal.templateType,
+        documentNumber: proposal.documentNumber,
+        companyDetails: proposal.companyDetails,
+        deliveryTerms: proposal.deliveryTerms,
+        authorizedSignatory: proposal.authorizedSignatory,
+        items: rfqItems,
+        // Include products array for compatibility (even if empty)
+        products: selectedProducts.map(p => ({
+          id: p.id || `prod_${Date.now()}`,
+          name: p.name || 'Unnamed Product',
+          category: p.category || 'Uncategorized',
+          quantity: p.quantity || 1,
+          unitPrice: p.unitPrice || 0,
+          discount: p.discount || 0,
+          taxable: p.taxable !== undefined ? p.taxable : true,
+          lineTotal: p.lineTotal || 0
+        })),
+        subtotal: subtotal,
+        totalDiscount: totalDiscount,
+        taxAmount: taxAmount,
+        grandTotal: grandTotal
+      };
+    } else {
+      // Simple proposal data structure - FIXED
+      proposalData = {
+        clientId: proposal.clientId, // This is required
+        proposalTitle: proposal.proposalTitle, // This is required
+        proposalNumber: proposal.proposalNumber,
+        clientName: proposal.clientName,
+        clientEmail: proposal.clientEmail,
+        company: proposal.company,
+        proposalDate: proposal.proposalDate,
+        validUntil: proposal.validUntil,
+        terms: proposal.terms,
+        notes: proposal.notes,
+        taxRate: proposal.taxRate,
+        status: status,
+        templateType: proposal.templateType,
+        products: selectedProducts.map(p => ({
+          id: p.id || `prod_${Date.now()}`,
+          name: p.name || 'Unnamed Product',
+          category: p.category || 'Uncategorized',
+          quantity: p.quantity || 1,
+          unitPrice: p.unitPrice || 0,
+          discount: p.discount || 0,
+          taxable: p.taxable !== undefined ? p.taxable : true,
+          lineTotal: p.lineTotal || 0
+        })),
+        subtotal: subtotal,
+        totalDiscount: totalDiscount,
+        taxAmount: taxAmount,
+        grandTotal: grandTotal
+      };
     }
 
-    if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
-      showToast('Please add at least one technical item to the proposal', 'error');
-      return;
-    }
-
-    if (!proposal.clientId) {
-      showToast('Please select a client for the proposal', 'error');
-      return;
-    }
-
-    try {
-      let proposalData;
-
-      if (proposal.templateType === 'technical-rfq') {
-        // Technical RFQ data structure
-        proposalData = {
-          ...proposal,
-          status: status,
-          items: rfqItems,
-          // Include simple products as fallback if needed
-          products: selectedProducts,
-          subtotal: subtotal,
-          totalDiscount: totalDiscount,
-          taxAmount: taxAmount,
-          grandTotal: grandTotal
-        };
-      } else {
-        // Simple proposal data structure
-        proposalData = {
-          proposalNumber: proposal.proposalNumber,
-          clientId: proposal.clientId,
-          client: proposal.clientName,
-          company: proposal.company,
-          proposalTitle: proposal.proposalTitle,
-          proposalDate: proposal.proposalDate,
-          validUntil: proposal.validUntil,
-          terms: proposal.terms,
-          notes: proposal.notes,
-          taxRate: proposal.taxRate,
-          status: status,
-          templateType: proposal.templateType,
-          products: selectedProducts.map(p => ({
-            id: p.id,
-            name: p.name,
-            category: p.category,
-            quantity: p.quantity,
-            unitPrice: p.unitPrice,
-            discount: p.discount,
-            taxable: p.taxable,
-            lineTotal: p.lineTotal
-          })),
-          subtotal: subtotal,
-          totalDiscount: totalDiscount,
-          taxAmount: taxAmount,
-          grandTotal: grandTotal
-        };
-      }
-
-      await onSave(proposalData);
-      showToast(`Proposal ${status === 'draft' ? 'saved as draft' : 'saved'} successfully!`, 'success');
-      
-      if (status === 'sent') {
-        onClose();
-      }
-    } catch (error) {
-      showToast('Error saving proposal: ' + error.message, 'error');
-    }
-  };
-
-  // Send proposal via email
-  const handleSendProposal = () => {
-    if (!emailData.to && !proposal.clientEmail) {
-      showToast('Please enter an email address', 'error');
-      return;
-    }
+    console.log('Saving proposal data:', proposalData); // Debug log
+    await onSave(proposalData);
+    showToast(`Proposal ${status === 'draft' ? 'saved as draft' : 'sent'} successfully!`, 'success');
     
+    if (status === 'sent') {
+      onClose();
+    }
+  } catch (error) {
+    console.error('Error saving proposal:', error);
+    showToast('Error saving proposal: ' + error.message, 'error');
+  }
+};
+
+ // Send proposal via email - FIXED
+const handleSendProposal = async () => {
+  if (!emailData.to && !proposal.clientEmail) {
+    showToast('Please enter an email address', 'error');
+    return;
+  }
+  
+  try {
+    // Save the proposal first, then send email
+    await handleSaveProposal("sent");
     setIsEmailModalOpen(false);
     addActivityLog("Proposal sent via email", "You", `To: ${emailData.to || proposal.clientEmail}`);
-    handleSaveProposal("sent");
-  };
+    showToast('Proposal sent successfully!', 'success');
+  } catch (error) {
+    showToast('Error sending proposal: ' + error.message, 'error');
+  }
+};
 
   // Reset form
   const handleResetForm = () => {
@@ -1530,36 +1569,41 @@ const CreateProposalModal = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-6 border-t border-gray-200 flex justify-between items-center">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 text-gray-600 hover:text-gray-800 transition duration-200 font-medium"
-          >
-            Cancel
-          </button>
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleSaveProposal("draft")}
-              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
-              disabled={
-                (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-                (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
-              }
-            >
-              Save Draft
-            </button>
-            <button
-              onClick={() => handleSaveProposal("sent")}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
-              disabled={
-                (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-                (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
-              }
-            >
-              Save & Send
-            </button>
-          </div>
-        </div>
+    {/* Footer Actions - UPDATED */}
+<div className="p-6 border-t border-gray-200 flex justify-between items-center">
+  <button
+    onClick={onClose}
+    className="px-6 py-3 text-gray-600 hover:text-gray-800 transition duration-200 font-medium"
+  >
+    Cancel
+  </button>
+  <div className="flex gap-3">
+    <button
+      onClick={() => handleSaveProposal("draft")}
+      className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
+      disabled={
+        (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+        (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) ||
+        !proposal.clientId ||
+        !proposal.proposalTitle
+      }
+    >
+      Save Draft
+    </button>
+    <button
+      onClick={() => handleSaveProposal("sent")}
+      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+      disabled={
+        (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
+        (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) ||
+        !proposal.clientId ||
+        !proposal.proposalTitle
+      }
+    >
+      Save & Send
+    </button>
+  </div>
+</div>
       </motion.div>
 
       {/* Toast Notification */}
