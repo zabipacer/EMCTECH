@@ -9,6 +9,7 @@ import {
   FaDownload
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
+import { downloadProposalPdf } from "./DownloadProposal";
 
 const EditProposalModal = ({ 
   open, 
@@ -112,11 +113,31 @@ const EditProposalModal = ({
     addActivityLog("Auto-saved", "System");
   };
 
-  // Filter products based on search
-  const filteredProducts = availableProducts.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Add helper + safe filteredProducts (replace the previous filteredProducts block)
+  const normalizeProductName = (product) => {
+    const n = product?.name;
+    if (!n) return "";
+    if (typeof n === "string") return n;
+    if (typeof n === "object") {
+      // try common locale keys then fall back to first value
+      return n.EN || n.en || n.ENGLISH || Object.values(n)[0] || "";
+    }
+    return String(n);
+  };
+
+  const normalizedSearch = (searchTerm || "").toString().trim().toLowerCase();
+
+  const filteredProducts = (availableProducts || []).filter(product => {
+    const name = normalizeProductName(product).toString().toLowerCase();
+    const category = (product?.category || "").toString().toLowerCase();
+    const description = (product?.description || "").toString().toLowerCase();
+    if (!normalizedSearch) return true;
+    return (
+      name.includes(normalizedSearch) ||
+      category.includes(normalizedSearch) ||
+      description.includes(normalizedSearch)
+    );
+  });
 
   // Handle proposal input changes
   const handleProposalChange = (e) => {
@@ -307,10 +328,23 @@ const EditProposalModal = ({
     setActivityLog(prev => [newEntry, ...prev]);
   };
 
-  // Generate PDF (simulated)
-  const handleGeneratePDF = () => {
-    setIsPdfPreviewOpen(true);
-    addActivityLog("PDF preview generated", "You");
+  // Generate PDF -> dispatch to the unified generator
+  const handleGeneratePDF = async () => {
+    try {
+      const payload = {
+        proposal,
+        selectedProducts,
+        rfqItems: proposal.rfqItems || [],
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        grandTotal,
+        formatCurrency
+      };
+      await downloadProposalPdf(payload);
+    } catch (err) {
+      console.error('Error generating PDF from edit modal:', err);
+    }
   };
 
   // Save proposal
@@ -1296,7 +1330,7 @@ const PDFPreviewModal = ({
               border: 1px solid #ddd;
             }
             table { 
-              width: 100%; 
+              width: '100%'; 
               border-collapse: collapse; 
               margin: 20px 0;
               font-size: 10px;
@@ -1774,8 +1808,10 @@ const SimpleProposalPreviewContent = ({ proposal, selectedProducts, subtotal, to
     </div>
   );
 };
+
 const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onSendProposal }) => {
   if (!open) return null;
+
 
   return (
     <motion.div
@@ -1844,4 +1880,5 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
     </motion.div>
   );
 };
+
 export default EditProposalModal;

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commercial Offer - EMC Technology</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Arial:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            color: #000000;
+            line-height: 1.3;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            background: white;
+        }
+        /* Header Styles */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            gap: 20px;
+        }
+        .logo-section {
+            flex: 0 0 auto;
+        }
+        .emc-logo {
+            border: 3px solid #001a4d;
+            border-radius: 8px;
+            padding: 6px 10px;
+            text-align: center;
+            font-weight: bold;
+            line-height: 1.1;
+        }
+        .emc-logo-text1 {
+            color: #001a4d;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .emc-logo-text2 {
+            color: #d32f2f;
+            font-size: 9px;
+            font-weight: bold;
+        }
+        .ref-number {
+            font-size: 10px;
+            margin-top: 5px;
+            color: #000;
+            line-height: 1.2;
+        }
+        .center-header {
+            flex: 1;
+            text-align: center;
+        }
+        .company-name {
+            color: #d32f2f;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .company-info {
+            font-size: 9px;
+            color: #000;
+            line-height: 1.4;
+        }
+        .right-header {
+            flex: 0 0 auto;
+            font-size: 9px;
+            text-align: right;
+            color: #000;
+        }
+        /* Title Styles */
+        .doc-title {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            margin: 20px 0;
+            letter-spacing: 0.5px;
+        }
+        /* Intro Text */
+        .intro-text {
+            text-align: justify;
+            font-size: 10px;
+            margin-bottom: 15px;
+            line-height: 1.5;
+            color: #000;
+        }
+        .intro-text strong {
+            font-weight: bold;
+            color: #d32f2f;
+        }
+        /* Table Styles */
+        .table-wrapper {
+            margin: 15px 0;
+            border: 1px solid #000;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #000;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 6px 5px;
+            text-align: left;
+            font-size: 9px;
+        }
+        th {
+            background-color: #e8e8e8;
+            font-weight: bold;
+            text-align: center;
+            padding: 8px 4px;
+        }
+        .col-no {
+            width: 4%;
+            text-align: center;
+        }
+        .col-material {
+            width: 18%;
+        }
+        .col-description {
+            width: 28%;
+        }
+        .col-photo {
+            width: 18%;
+            text-align: center;
+        }
+        .col-unit {
+            width: 6%;
+            text-align: center;
+        }
+        .col-qty {
+            width: 8%;
+            text-align: center;
+        }
+        .col-price {
+            width: 10%;
+            text-align: right;
+        }
+        .col-total {
+            width: 8%;
+            text-align: right;
+        }
+        /* Category Row */
+        .category-row td {
+            background-color: #e8e8e8;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+        /* Product Details */
+        .product-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .product-details {
+            font-size: 8px;
+            line-height: 1.3;
+        }
+        /* Photo Placeholder */
+        .photo-placeholder {
+            background-color: #d3d3d3;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #666;
+            border: 1px solid #999;
+        }
+        /* Total Rows */
+        .total-row td {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+        .final-total-row td {
+            background-color: #cce5ff;
+            font-weight: bold;
+            padding: 8px 5px;
+        }
+        .amount-col {
+            text-align: right;
+            padding-right: 10px;
+        }
+        /* Notes Section */
+        .notes-section {
+            margin: 20px 0;
+            font-size: 9px;
+            line-height: 1.6;
+        }
+        .notes-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .notes-list {
+            margin-left: 15px;
+        }
+        .notes-list li {
+            margin-bottom: 4px;
+        }
+        /* Signature Section */
+        .signature-section {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            font-size: 10px;
+        }
+        .sig-left {
+            flex: 0 0 auto;
+        }
+        .sig-center {
+            flex: 1;
+            text-align: center;
+        }
+        .sig-right {
+            flex: 0 0 auto;
+            text-align: right;
+        }
+        .sig-label {
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+        .sig-line {
+            width: 80px;
+            border-bottom: 1px solid #000;
+            margin-bottom: 5px;
+        }
+        .sig-stamp {
+            width: 70px;
+            height: 70px;
+            border: 2px solid #1976d2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1976d2;
+            font-weight: bold;
+            font-size: 10px;
+            text-align: center;
+            margin: 0 auto;
+        }
+        .sig-name {
+            font-weight: bold;
+            margin-bottom: 50px;
+        }
+        /* Brand Logos Section */
+        .logos-section {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .logo-item {
+            text-align: center;
+            color: #333;
+        }
+        .logo-item.red {
+            color: #d32f2f;
+        }
+        .logo-placeholder {
+            width: 50px;
+            height: 30px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-section">
+                <div class="emc-logo">
+                    <div class="emc-logo-text1">EMC</div>
+                    <div class="emc-logo-text2">TECHNOLOGY</div>
+                </div>
+                <div class="ref-number">
+                    <div>NoEMC28/0214</div>
+                    <div>15.10.2025</div>
+                </div>
+            </div>
+
+            <div class="center-header">
+                <div class="company-name">LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»</div>
+                <div class="company-info">
+                    <div>Tashkent city, Yunusabad district, Bogishamot 21B; Phone: +998 90 122 55 18</div>
+                    <div>Bank account: 2020 8000 0052 8367 7001  MFO: 08419 ID: 307 738 207 OK ED: 43299 E-mail: info@emctech.uz</div>
+                </div>
+            </div>
+
+            <div class="right-header">
+                To Directiory of ENERSOK FE LCC
+            </div>
+        </div>
+
+        <!-- Title -->
+        <div class="doc-title">COMMERCIAL OFFER</div>
+
+        <!-- Intro -->
+        <div class="intro-text">
+            We would like to inform you that "<strong>ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY</strong>" LLC will be sending you a commercial offer for the supply of the items listed below!
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th class="col-material">Requested Material description</th>
+                        <th class="col-description">Technical description Will be supplied</th>
+                        <th class="col-photo">Will be supplied PHOTO</th>
+                        <th class="col-unit">Unit</th>
+                        <th class="col-qty">Quantity</th>
+                        <th class="col-price">Unit price(USD)</th>
+                        <th class="col-total">Total amount with (USD)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="category-row">
+                        <td colspan="8">1. TESTING AND MEASURING</td>
+                    </tr>
+
+                    <tr>
+                        <td class="col-no" style="font-weight: bold;">11</td>
+                        <td class="col-material">
+                            <div class="product-title">Hart communicator Emerson 475FP1ELUGMTA</div>
+                        </td>
+                        <td class="col-description">
+                            <div class="product-details">
+                                <strong>475FP1ELUGMTA | Emerson 475 Field Communicator Microprocessor 80 MHz Hitachi SH3 Memory Internal Flash 32 MB System Card 1 GB secure digital card RAM 32 MB</strong><br>
+                                Weight Approximately 1.65 lb. (0.75kg) with battery Dimensions 8.94" x 6.04" (22.7 x 15.3 cm) (8.9 cm) transflective display with unschosen: Anti-glare coated Keypad: 25 keys including 4 action (arrow) keys, membrane using scale feedback Battery Backlight Approx. Lithium (non-condensing) for 0°C (32°F) to +50°C (122°F) Charge 10°C (50°F) to +40°C (104°F) Storage -20°C (-4°F) to +55°C (131°F)
+                            </div>
+                        </td>
+                        <td class="col-photo">
+                            <div class="photo-placeholder">Hart Communicator Device</div>
+                        </td>
+                        <td class="col-unit">SET</td>
+                        <td class="col-qty">1</td>
+                        <td class="col-price">8,000.00</td>
+                        <td class="col-total">8,000.00</td>
+                    </tr>
+
+                    <tr>
+                        <td colspan="8" style="height: 15px; border: none;"></td>
+                    </tr>
+
+                    <tr class="total-row">
+                        <td colspan="6" class="amount-col">Total USD:</td>
+                        <td colspan="2" class="amount-col">8,000.00</td>
+                    </tr>
+
+                    <tr class="total-row">
+                        <td colspan="6" class="amount-col">VAT 12%:</td>
+                        <td colspan="2" class="amount-col">960.00</td>
+                    </tr>
+
+                    <tr class="final-total-row">
+                        <td colspan="6" class="amount-col">Total including VAT 12% in USD:</td>
+                        <td colspan="2" class="amount-col">8,960.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Notes -->
+        <div class="notes-section">
+            <div class="notes-title">NOTES:</div>
+            <ul class="notes-list">
+                <li><strong>1. Terms of payment:</strong> 50 % prepayment.</li>
+                <li><strong>2. Estimated delivery time:</strong> 6-12 weeks.</li>
+                <li><strong>3. Terms of delivery:</strong> DDP</li>
+            </ul>
+        </div>
+
+        <!-- Signature -->
+        <div class="signature-section">
+            <div class="sig-left">
+                <div class="sig-label">General manager</div>
+                <div class="sig-line"></div>
+            </div>
+            <div class="sig-center">
+                <div class="sig-stamp">Stamp</div>
+            </div>
+            <div class="sig-right">
+                <div class="sig-name">S.S. Abdushakarov</div>
+            </div>
+        </div>
+
+        <!-- Brand Logos -->
+        <div class="logos-section">
+            <div class="logo-item">
+                <div class="logo-placeholder"></div>
+                INOVA
+            </div>
+            <div class="logo-item">
+                <div class="logo-placeholder"></div>
+                WATERMAN<br>COMPLIANCE
+            </div>
+            <div class="logo-item">
+                <div class="logo-placeholder"></div>
+                SWAN
+            </div>
+            <div class="logo-item">
+                <div class="logo-placeholder"></div>
+                PASS
+            </div>
+            <div class="logo-item red">
+                <div class="logo-placeholder"></div>
+                Honeywell
+            </div>
+            <div class="logo-item">
+                <div class="logo-placeholder"></div>
+                RO ST
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

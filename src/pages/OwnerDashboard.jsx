@@ -1,4 +1,4 @@
-// pages/OwnerDashboard.jsx
+// src/pages/OwnerDashboard.jsx
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,205 +23,33 @@ import { FaGear } from "react-icons/fa6";
 import { useLayout } from "../components/Layout/AppLayout";
 import { useAuth } from "../contexts/AuthContext";
 
-// Mock data aligned with our business needs
-const mockData = {
-  stats: {
-    products: { 
-      count: 245, 
-      trend: 12, 
-      pending: 8,
-      description: "Active products across both companies"
-    },
-    proposals: { 
-      count: 45, 
-      trend: 5, 
-      pending: 12,
-      description: "Proposals sent to clients"
-    },
-    clients: { 
-      count: 156, 
-      trend: 8, 
-      pending: 0,
-      description: "Total active clients"
-    },
-    revenue: { 
-      count: "$24,580", 
-      trend: 15, 
-      pending: "$8,450",
-      description: "Revenue this month"
-    }
-  },
-  recentActivities: [
-    { 
-      id: 1, 
-      type: "proposal", 
-      message: "Proposal #PROP-2024-045 sent to ABC Corporation", 
-      time: "5 min ago", 
-      icon: FaFileInvoice, 
-      color: "text-blue-500" 
-    },
-    { 
-      id: 2, 
-      type: "product", 
-      message: 'Product "Industrial Motor 5HP" updated', 
-      time: "1 hour ago", 
-      icon: FaBox, 
-      color: "text-green-500" 
-    },
-    { 
-      id: 3, 
-      type: "sync", 
-      message: "15 products synced to Innovamechanics.com", 
-      time: "2 hours ago", 
-      icon: FaSync, 
-      color: "text-purple-500" 
-    },
-    { 
-      id: 4, 
-      type: "client", 
-      message: "New client registered: TechSolutions LLC", 
-      time: "3 hours ago", 
-      icon: FaUsers, 
-      color: "text-orange-500" 
-    },
-    { 
-      id: 5, 
-      type: "invoice", 
-      message: "Invoice #INV-2024-128 marked as paid", 
-      time: "4 hours ago", 
-      icon: FaDollarSign, 
-      color: "text-green-500" 
-    }
-  ],
-  quickActions: [
-    { 
-      id: 1, 
-      title: "Add New Product", 
-      path: "/products", 
-      icon: FaPlusCircle, 
-      color: "bg-blue-600 hover:bg-blue-700",
-      description: "Create new product listing"
-    },
-    { 
-      id: 2, 
-      title: "Create Proposal", 
-      path: "/proposals/create", 
-      icon: FaFileInvoice, 
-      color: "bg-green-600 hover:bg-green-700",
-      description: "Create client proposal"
-    },
-    { 
-      id: 3, 
-      title: "Add Client", 
-      path: "/clients", 
-      icon: FaUsers, 
-      color: "bg-purple-600 hover:bg-purple-700",
-      description: "Add new client to CRM"
-    },
-    { 
-      id: 4, 
-      title: "Import Excel", 
-      path: "/products", 
-      icon: FaFileExcel, 
-      color: "bg-orange-600 hover:bg-orange-700",
-      description: "Bulk import products"
-    },
-    {
-      id: 5,
-      title: "Sync Websites",
-      path: "/automation",
-      icon: FaSync,
-      color: "bg-indigo-600 hover:bg-indigo-700",
-      description: "Sync to company websites"
-    },
-    { 
-      id: 6, 
-      title: "View Reports", 
-      path: "/analytics", 
-      icon: FaChartBar, 
-      color: "bg-red-600 hover:bg-red-700",
-      description: "View business analytics"
-    },
-    {
-      id: 7,
-      title: "Analytics",
-      path: "/analytics",
-      icon: FaFlag,
-      color: "bg-indigo-600 hover:bg-indigo-700",
-      description: "Sync to company websites"
-    },
-    {
-      id: 8,
-      title: "Settings",
-      path: "/settings",
-      icon: FaGear,
-      color: "bg-indigo-600 hover:bg-indigo-700",
-      description: "Sync to company websites"
-    },{
-  id: 9,
-  title: "User Approvals",
-  path: "/user-approvals",
-  icon: FaUserCheck,
-  color: "bg-teal-600 hover:bg-teal-700",
-  description: "Approve or reject user requests"
-}
-  ],
-  pendingAlerts: [
-    {
-      id: 1,
-      type: "low_stock",
-      title: "Low Stock Alert",
-      message: "8 products are running low on stock",
-      count: 8,
-      icon: FaWarehouse,
-      color: "text-yellow-600",
-      bgColor: "bg-yellow-50",
-      borderColor: "border-yellow-200",
-      path: "/products"
-    },
-    {
-      id: 2,
-      type: "missing_images",
-      title: "Missing Images",
-      message: "12 products need product images",
-      count: 12,
-      icon: FaBox,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      borderColor: "border-blue-200",
-      path: "/products"
-    },
-    {
-      id: 3,
-      type: "pending_proposals",
-      title: "Pending Proposals",
-      message: "5 proposals awaiting client response",
-      count: 5,
-      icon: FaFileInvoice,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      borderColor: "border-orange-200",
-      path: "/proposals"
-    },
-    {
-      id: 4,
-      type: "overdue_invoices",
-      title: "Overdue Invoices",
-      message: "3 invoices are overdue for payment",
-      count: 3,
-      icon: FaDollarSign,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
-      borderColor: "border-red-200",
-      path: "/proposals"
-    },
-  ]
-};
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  limit as fsLimit,
+  where
+} from "firebase/firestore";
+import { db } from "../firebase/firebase";
+
+/**
+ * OwnerDashboard (Firestore-connected)
+ *
+ * - Listens to clients, products, proposals collections in real-time
+ * - Computes basic stats: counts, revenue (paid), pending proposals, low-stock alerts
+ * - Builds a merged recentActivities list from recent proposals & product updates
+ *
+ * Notes:
+ * - Update collection names or fields if your database uses different naming.
+ * - Fields expected (from your schema): products.stock, products.lowStockThreshold,
+ *   proposals.grandTotal, proposals.status, proposals.updatedAt, clients.createdAt
+ */
 
 const StatCard = ({ title, count, trend, pending, description, icon: Icon, link, color, delay }) => {
   const trendColor = trend > 0 ? "text-green-400" : trend < 0 ? "text-red-400" : "text-gray-400";
   const trendText = trend > 0 ? `+${trend}%` : `${trend}%`;
-  const isRevenue = title.includes('Revenue');
+  const isRevenue = title.toLowerCase().includes("revenue");
 
   const CardContent = () => (
     <motion.div
@@ -231,7 +59,6 @@ const StatCard = ({ title, count, trend, pending, description, icon: Icon, link,
       transition={{ duration: 0.5, delay }}
       whileHover={{ scale: 1.02, y: -5 }}
     >
-      {/* Background decoration */}
       <div className="absolute -right-3 -top-3 sm:-right-4 sm:-top-4 lg:-right-6 lg:-top-6 opacity-10 transform rotate-12">
         <Icon className="text-5xl sm:text-6xl lg:text-9xl" />
       </div>
@@ -245,7 +72,7 @@ const StatCard = ({ title, count, trend, pending, description, icon: Icon, link,
             <span className={`text-xs ${trendColor}`}>
               {trendText} from last month
             </span>
-            {pending && (
+            {pending !== undefined && (
               <span className="bg-white bg-opacity-20 text-xs px-2 py-1 rounded-full whitespace-nowrap">
                 {isRevenue ? pending : `${pending} pending`}
               </span>
@@ -283,7 +110,7 @@ const ActivityItem = ({ activity }) => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-gray-800 font-medium text-xs sm:text-sm lg:text-base truncate">{activity.message}</p>
-          <p className="text-gray-500 text-xs lg:text-sm">{activity.time}</p>
+          <p className="text-gray-500 text-xs lg:text-sm">{activity.timePretty}</p>
         </div>
       </div>
       <FaArrowRight className="text-gray-300 group-hover:text-gray-500 transform group-hover:translate-x-1 transition-all flex-shrink-0 text-xs sm:text-sm lg:text-base" />
@@ -350,7 +177,6 @@ const CompanySwitcher = ({ currentCompany, onCompanyChange }) => {
 
   return (
     <div className="relative">
-      {/* Mobile Dropdown */}
       <div className="block lg:hidden">
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -391,7 +217,6 @@ const CompanySwitcher = ({ currentCompany, onCompanyChange }) => {
         )}
       </div>
 
-      {/* Desktop View */}
       <div className="hidden lg:flex items-center space-x-2 bg-white rounded-lg border border-gray-300 p-1">
         {companies.map((company) => {
           const Icon = company.icon;
@@ -429,12 +254,160 @@ export default function OwnerDashboard() {
   }, [setTitle]);
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setActivities(mockData.recentActivities);
-      setStats(mockData.stats);
-    }, 500);
+    // Real-time listeners for clients, products, proposals
+    const clientsCol = collection(db, "clients");
+    const productsCol = collection(db, "products");
+    const proposalsCol = collection(db, "proposals");
+
+    // clients count
+    const unsubClients = onSnapshot(
+      clientsCol,
+      (snap) => {
+        setStats((prev) => ({ ...prev, clients: { count: snap.size, trend: prev.clients?.trend || 0, pending: prev.clients?.pending || 0, description: "Total active clients" } }));
+      },
+      (err) => {
+        console.error("clients onSnapshot error:", err);
+      }
+    );
+
+    // products: count and low-stock
+    const unsubProducts = onSnapshot(
+      productsCol,
+      (snap) => {
+        const products = [];
+        snap.forEach((d) => products.push({ id: d.id, ...d.data() }));
+        const lowStock = products.filter((p) => {
+          // prefer numeric fields; handle strings that contain numbers
+          const stock = typeof p.stock === "number" ? p.stock : Number(p.stock || 0);
+          const threshold = typeof p.lowStockThreshold === "number" ? p.lowStockThreshold : Number(p.lowStockThreshold || 0);
+          return !isNaN(stock) && !isNaN(threshold) && stock <= threshold;
+        });
+        setStats((prev) => ({ ...prev, products: { count: products.length, trend: prev.products?.trend || 0, pending: lowStock.length, description: "Active products across both companies" } }));
+      },
+      (err) => {
+        console.error("products onSnapshot error:", err);
+      }
+    );
+
+    // proposals: count and revenue sums
+    const unsubProposals = onSnapshot(
+      proposalsCol,
+      (snap) => {
+        let paidTotal = 0;
+        let pendingTotalCount = 0;
+        let pendingTotalValue = 0;
+        const proposals = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          proposals.push({ id: d.id, ...data });
+          const grand = Number(data.grandTotal || 0);
+          const status = (data.status || "").toLowerCase();
+          if (status === "paid" || status === "completed") {
+            if (!isNaN(grand)) paidTotal += grand;
+          } else {
+            pendingTotalCount += 1;
+            if (!isNaN(grand)) pendingTotalValue += grand;
+          }
+        });
+        setStats((prev) => ({ ...prev, proposals: { count: proposals.length, trend: prev.proposals?.trend || 0, pending: pendingTotalCount, description: "Proposals sent to clients" }, revenue: { count: `$${Number(paidTotal).toLocaleString()}`, trend: prev.revenue?.trend || 0, pending: `$${Number(pendingTotalValue).toLocaleString()}`, description: "Revenue (paid proposals)" } }));
+      },
+      (err) => {
+        console.error("proposals onSnapshot error:", err);
+      }
+    );
+
+    // Build recent activities by merging recent proposals and recent product changes
+    // We'll fetch latest 8 proposals and latest 8 products (by updatedAt) and merge them.
+    const qProposalsRecent = query(proposalsCol, orderBy("updatedAt", "desc"), fsLimit(8));
+    const qProductsRecent = query(productsCol, orderBy("updatedAt", "desc"), fsLimit(8));
+
+    const unsubRecentProposals = onSnapshot(qProposalsRecent, (snap) => {
+      const items = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        const ts = data.updatedAt && data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt || data.createdAt || null;
+        items.push({
+          id: d.id,
+          type: "proposal",
+          message: `Proposal ${data.proposalNumber || data.proposalTitle || ""} (${data.clientName || data.clientEmail || "client"}) - ${data.status || ""}`,
+          time: ts,
+          timePretty: ts ? prettyTime(ts) : "just now",
+          icon: FaFileInvoice,
+          color: "text-blue-500",
+          sortTs: ts instanceof Date ? ts.getTime() : (typeof ts === "number" ? ts : Date.now())
+        });
+      });
+      // merge with current activities from products on next step
+      setActivities((prev) => {
+        // find previous products entries and merge here to avoid flicker; we'll do merging in both callbacks
+        const prevProducts = prev.filter((p) => p.type === "product");
+        const merged = [...items, ...prevProducts];
+        merged.sort((a, b) => b.sortTs - a.sortTs);
+        return merged.slice(0, 10);
+      });
+    }, (err) => console.error("recent proposals snapshot error:", err));
+
+    const unsubRecentProducts = onSnapshot(qProductsRecent, (snap) => {
+      const items = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        const ts = data.updatedAt && data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt || data.createdAt || null;
+        items.push({
+          id: d.id,
+          type: "product",
+          message: `Product "${(data.title || data.name || {}).EN || data.title || (data.name && data.name.EN) || data.name || "Unnamed"}" updated`,
+          time: ts,
+          timePretty: ts ? prettyTime(ts) : "just now",
+          icon: FaBox,
+          color: "text-green-500",
+          sortTs: ts instanceof Date ? ts.getTime() : (typeof ts === "number" ? ts : Date.now())
+        });
+      });
+      setActivities((prev) => {
+        const prevProposals = prev.filter((p) => p.type === "proposal");
+        const merged = [...items, ...prevProposals];
+        merged.sort((a, b) => b.sortTs - a.sortTs);
+        return merged.slice(0, 10);
+      });
+    }, (err) => console.error("recent products snapshot error:", err));
+
+    // cleanup
+    return () => {
+      try { unsubClients(); } catch (e) {}
+      try { unsubProducts(); } catch (e) {}
+      try { unsubProposals(); } catch (e) {}
+      try { unsubRecentProposals(); } catch (e) {}
+      try { unsubRecentProducts(); } catch (e) {}
+    };
   }, []);
+
+  // prettyTime helper
+  function prettyTime(ts) {
+    const d = ts instanceof Date ? ts : (ts && ts.toDate ? ts.toDate() : new Date(ts));
+    const now = new Date();
+    const diff = Math.floor((now - d) / 1000); // seconds
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return d.toLocaleString();
+  }
+
+  // fallback to mock data while loading
+  useEffect(() => {
+    // If stats empty for a short while, show mock data to avoid blank UI
+    const t = setTimeout(() => {
+      if (!stats.products && !stats.proposals && !stats.clients) {
+        // set minimal mock stats
+        setStats({
+          products: { count: 0, trend: 0, pending: 0, description: "Active products" },
+          proposals: { count: 0, trend: 0, pending: 0, description: "Proposals" },
+          revenue: { count: "$0", trend: 0, pending: "$0", description: "Revenue" },
+          clients: { count: 0, trend: 0, pending: 0, description: "Clients" }
+        });
+      }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [stats]);
 
   const statCards = [
     {
@@ -476,6 +449,71 @@ export default function OwnerDashboard() {
       icon: FaDollarSign,
       link: "/proposals",
       color: "bg-gradient-to-br from-orange-500 to-orange-600"
+    }
+  ];
+
+  // make UI quick actions & alerts (static or derived)
+  const quickActions = [
+    { id: 1, title: "Add New Product", path: "/products", icon: FaPlusCircle, color: "bg-blue-600 hover:bg-blue-700", description: "Create new product listing" },
+    { id: 2, title: "Create Proposal", path: "/proposals/create", icon: FaFileInvoice, color: "bg-green-600 hover:bg-green-700", description: "Create client proposal" },
+    { id: 3, title: "Add Client", path: "/clients", icon: FaUsers, color: "bg-purple-600 hover:bg-purple-700", description: "Add new client to CRM" },
+    { id: 4, title: "Import Excel", path: "/products", icon: FaFileExcel, color: "bg-orange-600 hover:bg-orange-700", description: "Bulk import products" },
+    { id: 5, title: "Sync Websites", path: "/automation", icon: FaSync, color: "bg-indigo-600 hover:bg-indigo-700", description: "Sync to company websites" },
+    { id: 6, title: "View Reports", path: "/analytics", icon: FaChartBar, color: "bg-red-600 hover:bg-red-700", description: "View business analytics" },
+    { id: 7, title: "Analytics", path: "/analytics", icon: FaFlag, color: "bg-indigo-600 hover:bg-indigo-700", description: "Analytics & KPIs" },
+    { id: 8, title: "Settings", path: "/settings", icon: FaGear, color: "bg-indigo-600 hover:bg-indigo-700", description: "App settings" },
+    { id: 9, title: "User Approvals", path: "/user-approvals", icon: FaUserCheck, color: "bg-teal-600 hover:bg-teal-700", description: "Approve user requests" }
+  ];
+
+  // build alerts from stats (low stock + missing images + pending proposals + overdue invoices)
+  const alerts = [
+    {
+      id: "low_stock",
+      type: "low_stock",
+      title: "Low Stock Alert",
+      message: `${stats.products?.pending || 0} products are running low on stock`,
+      count: stats.products?.pending || 0,
+      icon: FaWarehouse,
+      color: "text-yellow-600",
+      bgColor: "bg-yellow-50",
+      borderColor: "border-yellow-200",
+      path: "/products"
+    },
+    {
+      id: "pending_proposals",
+      type: "pending_proposals",
+      title: "Pending Proposals",
+      message: `${stats.proposals?.pending || 0} proposals awaiting client response`,
+      count: stats.proposals?.pending || 0,
+      icon: FaFileInvoice,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "border-orange-200",
+      path: "/proposals"
+    },
+    {
+      id: "overdue_invoices",
+      type: "overdue_invoices",
+      title: "Overdue Invoices",
+      message: `Check proposals for overdue payments`,
+      count: 0,
+      icon: FaDollarSign,
+      color: "text-red-600",
+      bgColor: "bg-red-50",
+      borderColor: "border-red-200",
+      path: "/proposals"
+    },
+    {
+      id: "missing_images",
+      type: "missing_images",
+      title: "Missing Images",
+      message: `Some products are missing images – review products`,
+      count: 0,
+      icon: FaBox,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-200",
+      path: "/products"
     }
   ];
 
@@ -544,7 +582,7 @@ export default function OwnerDashboard() {
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
-              {mockData.quickActions.map((action) => (
+              {quickActions.map((action) => (
                 <QuickActionButton key={action.id} action={action} />
               ))}
             </div>
@@ -563,7 +601,7 @@ export default function OwnerDashboard() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 lg:gap-4">
-              {mockData.pendingAlerts.map((alert) => (
+              {alerts.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} />
               ))}
             </div>
@@ -587,7 +625,7 @@ export default function OwnerDashboard() {
           <ul className="space-y-0 max-h-[300px] sm:max-h-[350px] lg:max-h-[400px] overflow-y-auto">
             <AnimatePresence>
               {activities.map((activity) => (
-                <ActivityItem key={activity.id} activity={activity} />
+                <ActivityItem key={activity.id + "-" + activity.type} activity={activity} />
               ))}
             </AnimatePresence>
           </ul>

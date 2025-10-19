@@ -33,6 +33,9 @@ const ProposalManagement = ({ user }) => {
     products: null
   });
 
+  // load products for product selection modal (falls back to all products if user missing)
+  const { products: availableProducts, loading: productsLoading, error: productsError } = useProducts(user);
+
   // Firebase hooks with error handling
   const { 
     proposals, 
@@ -51,11 +54,13 @@ const ProposalManagement = ({ user }) => {
     addClient 
   } = useClients(user);
 
-  const { 
-    products, 
-    loading: productsLoading, 
-    error: productsError
-  } = useProducts(user);
+  // Normalize products to ensure imageUrl field
+  const normalizedProducts = useMemo(() => {
+    return (availableProducts || []).map(product => ({
+      ...product,
+      imageUrl: product.imageUrl || product.thumbnail || ''
+    }));
+  }, [availableProducts]);
 
   // Update error state when Firebase errors occur
   useEffect(() => {
@@ -65,6 +70,11 @@ const ProposalManagement = ({ user }) => {
       products: productsError
     });
   }, [proposalsError, clientsError, productsError]);
+
+  // DEBUG: log to confirm products arrived
+  useEffect(() => {
+    console.log('ProposalManagement: availableProducts length =', availableProducts?.length);
+  }, [availableProducts]);
 
   // Local UI state
   const [searchTerm, setSearchTerm] = useState('');
@@ -174,9 +184,32 @@ const ProposalManagement = ({ user }) => {
   };
 
   // Updated PDF download handler
+  const buildPdfPayloadFromProposal = (proposal) => {
+    const selectedProducts = proposal.products || proposal.items || [];
+    const rfqItems = proposal.rfqItems || [];
+    const subtotal = (selectedProducts || []).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1)), 0);
+    const totalDiscount = (selectedProducts || []).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1) * ((p.discount ?? 0) / 100)), 0);
+    const taxableSubtotal = (selectedProducts || []).filter(p => p.taxable).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1)), 0);
+    const taxAmount = taxableSubtotal * ((proposal.taxRate ?? 0) / 100);
+    const grandTotal = typeof proposal.grandTotal === 'number' ? proposal.grandTotal : (subtotal - totalDiscount + taxAmount);
+    const formatCurrency = (amt) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amt || 0);
+
+    return {
+      proposal,
+      selectedProducts,
+      rfqItems,
+      subtotal,
+      totalDiscount,
+      taxAmount,
+      grandTotal,
+      formatCurrency
+    };
+  };
+
   const downloadProposalPdfHandler = async (proposal) => {
     try {
-      await downloadProposalPdf(proposal);
+      const payload = buildPdfPayloadFromProposal(proposal);
+      await downloadProposalPdf(payload);
       showToast('Proposal PDF downloaded successfully', 'success');
     } catch (error) {
       console.error('Error downloading PDF:', error);
@@ -364,20 +397,19 @@ const ProposalManagement = ({ user }) => {
   };
 
   /* ---------------------- Create/Edit Proposal Handlers ----------------------- */
- // In ProposalManagement.jsx - make sure this exists
-const handleSaveNewProposal = async (proposalData) => {
-  try {
-    setIsLoading(true);
-    await addProposal(proposalData);
-    setToast({ message: 'Proposal created successfully!', type: 'success' });
-    setCreateProposalModalOpen(false); // <-- FIXED
-  } catch (error) {
-    console.error('Error saving proposal:', error);
-    setToast({ message: `Error saving proposal: ${error.message}`, type: 'error' });
-  } finally {
-    setIsLoading(false);
-  }
-};
+  const handleSaveNewProposal = async (proposalData) => {
+    try {
+      setIsLoading(true);
+      await addProposal(proposalData);
+      setToast({ message: 'Proposal created successfully!', type: 'success' });
+      setCreateProposalModalOpen(false); // <-- FIXED
+    } catch (error) {
+      console.error('Error saving proposal:', error);
+      setToast({ message: `Error saving proposal: ${error.message}`, type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSaveEditedProposal = async (updatedProposal) => {
     try {
@@ -621,11 +653,10 @@ const handleSaveNewProposal = async (proposalData) => {
           <CreateProposalModal
             open={createProposalModalOpen}
             onClose={() => setCreateProposalModalOpen(false)}
-            onSave={handleSaveNewProposal}
-            clients={clients || []}
-            availableProducts={products || []}
-            loading={productsLoading}
-            onAddClient={addClient}
+            onAddClient={handleInviteClient} // your existing handler
+            onSave={handleSaveNewProposal} // existing save handler
+            clients={clients}
+            availableProducts={availableProducts}
           />
 
           <EditProposalModal
@@ -637,7 +668,7 @@ const handleSaveNewProposal = async (proposalData) => {
             onSave={handleSaveEditedProposal}
             proposal={editingProposal}
             clients={clients || []}
-            availableProducts={products || []}
+            availableProducts={normalizedProducts} // Use normalized products
             loading={productsLoading}
           />
           

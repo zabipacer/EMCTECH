@@ -1,106 +1,41 @@
 import React from "react";
 import { motion } from "framer-motion";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { downloadProposalPdf } from "./DownloadProposal";
 
 export const PreviewModal = ({ proposal, onClose }) => {
   if (!proposal) return null;
 
+  const computePayload = () => {
+    const selectedProducts = proposal.products || proposal.items || [];
+    const rfqItems = proposal.rfqItems || [];
+    const subtotal = (selectedProducts || []).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1)), 0);
+    const totalDiscount = (selectedProducts || []).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1) * ((p.discount ?? 0) / 100)), 0);
+    const taxableSubtotal = (selectedProducts || []).filter(p => p.taxable).reduce((s, p) => s + ((p.unitPrice ?? p.price ?? 0) * (p.quantity ?? 1)), 0);
+    const taxAmount = taxableSubtotal * ((proposal.taxRate ?? 0) / 100);
+    const grandTotal = typeof proposal.grandTotal === 'number' ? proposal.grandTotal : (subtotal - totalDiscount + taxAmount);
+    const formatCurrency = (amt) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amt || 0);
+
+    return { proposal, selectedProducts, rfqItems, subtotal, totalDiscount, taxAmount, grandTotal, formatCurrency };
+  };
+
   const handleDownload = async () => {
     try {
-      // Create a temporary container for PDF rendering
-      const tempDiv = document.createElement("div");
-      tempDiv.style.position = "fixed";
-      tempDiv.style.left = "-9999px";
-      tempDiv.style.top = "0";
-      tempDiv.style.width = "794px"; // A4 width in pixels at 96dpi
-      tempDiv.style.padding = "40px";
-      tempDiv.style.backgroundColor = "white";
-      tempDiv.style.fontFamily = "Arial, Helvetica, sans-serif";
-      
-      // Set the content for PDF
-      tempDiv.innerHTML = `
-        <div id="proposal-pdf-content">
-          <h1 style="color: #333; margin-bottom: 20px;">Proposal ${proposal.number || proposal.client}</h1>
-          <div style="margin-bottom: 15px;">
-            <strong>Client:</strong> ${proposal.client || "N/A"}
-          </div>
-          <div style="margin-bottom: 15px;">
-            <strong>Company:</strong> ${proposal.company || "N/A"}
-          </div>
-          <div style="margin-bottom: 20px;">
-            <strong>Total:</strong> $${(proposal.total ?? 0).toLocaleString()}
-          </div>
-          <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;"/>
-          <div>
-            <strong>Items:</strong> ${proposal.items || "No items specified"}
-          </div>
-          <div style="margin-top: 30px; font-size: 12px; color: #666;">
-            Generated on ${new Date().toLocaleDateString()}
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(tempDiv);
-
-      // Wait for the content to be rendered
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      const element = tempDiv.querySelector("#proposal-pdf-content");
-      
-      if (!element) {
-        throw new Error("PDF content element not found");
-      }
-
-      // Convert HTML to canvas
-      const canvas = await html2canvas(element, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff"
-      });
-
-      // Convert canvas to image data
-      const imgData = canvas.toDataURL("image/png");
-      
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4"
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      
-      // Calculate image dimensions to fit the page
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Add image to PDF
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-      
-      // Save the PDF
-      pdf.save(`${proposal.number || proposal.client || "proposal"}-proposal.pdf`);
-
-      // Clean up
-      document.body.removeChild(tempDiv);
-
+      const payload = computePayload();
+      await downloadProposalPdf(payload);
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      alert("Error generating PDF. Please try again.");
+      console.error('Preview download failed:', error);
+      alert('Error generating PDF. Check console.');
     }
   };
 
-  // HTML content for modal preview (separate from PDF content)
   const modalHtml = `
     <div style="font-family: Arial, Helvetica, sans-serif; padding: 20px;">
-      <h1>Proposal ${proposal.number || proposal.client}</h1>
-      <p><strong>Client:</strong> ${proposal.client}</p>
-      <p><strong>Company:</strong> ${proposal.company}</p>
-      <p><strong>Total:</strong> $${(proposal.total ?? 0).toLocaleString()}</p>
+      <h1>Proposal ${proposal.proposalNumber || proposal.number || proposal.client}</h1>
+      <p><strong>Client:</strong> ${proposal.client || proposal.clientName || 'N/A'}</p>
+      <p><strong>Company:</strong> ${proposal.company || proposal.companyDetails?.name || 'N/A'}</p>
+      <p><strong>Total:</strong> ${(proposal.grandTotal ?? proposal.total ?? 0)}</p>
       <hr/>
-      <p>Items: ${proposal.items}</p>
+      <p>Items: ${(proposal.products || proposal.items || []).length}</p>
     </div>
   `;
 
@@ -115,7 +50,7 @@ export const PreviewModal = ({ proposal, onClose }) => {
         <div className="p-4 border-b flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold">Proposal Preview</h3>
-            <p className="text-sm text-gray-500">{proposal.client} • {proposal.number}</p>
+            <p className="text-sm text-gray-500">{proposal.client} • {proposal.proposalNumber || proposal.number}</p>
           </div>
           <div className="flex items-center gap-2">
             <button 

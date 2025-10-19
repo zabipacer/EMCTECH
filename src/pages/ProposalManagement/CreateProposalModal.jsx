@@ -6,11 +6,11 @@ import {
   FaPaperPlane, FaHistory, FaBuilding, FaFileAlt,
   FaCheck, FaExclamationTriangle, FaPercent, FaReceipt,
   FaSpinner, FaIndustry, FaFileInvoice, FaSignature,
-  FaDownload
+  FaDownload, FaImage, FaFileContract
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductSelectionModal from "./ProductSelectionModal";
-import { downloadProposalPdf } from "./DownloadProposal"; // Make sure this import is present
+import { downloadProposalPdf } from "./DownloadProposal";
 
 const CreateProposalModal = ({ 
   open, 
@@ -35,26 +35,26 @@ const CreateProposalModal = ({
     discount: 0,
     taxRate: 10,
     status: "draft",
-    templateType: "simple", // ADDED: Template type
-    documentNumber: "", // ADDED: For Technical RFQ
-    companyDetails: { // ADDED: For Technical RFQ
-      name: "",
-      address: "",
-      phone: "",
-      email: "",
-      bankAccount: "",
-      mfo: "",
-      taxId: "",
-      oked: ""
+    templateType: "simple-commercial", // Updated: Four template types
+    documentNumber: "",
+    companyDetails: {
+      name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
+      address: "Tashkent city, Yunusabad district, Bogishamol 21B",
+      phone: "+998 90 122 55 18",
+      email: "info@emctech.uz",
+      bankAccount: "2020 8000 0052 8367 7001",
+      mfo: "00419",
+      taxId: "307 738 207",
+      oked: "43299"
     },
-    deliveryTerms: { // ADDED: For Technical RFQ
+    deliveryTerms: {
       paymentTerms: "50% prepayment",
-      deliveryTime: "6-8 weeks",
+      deliveryTime: "6-12 weeks",
       incoterms: "DDP"
     },
-    authorizedSignatory: { // ADDED: For Technical RFQ
+    authorizedSignatory: {
       title: "General manager",
-      name: ""
+      name: "S.S. Abdushukurov"
     }
   });
   
@@ -78,7 +78,7 @@ const CreateProposalModal = ({
   const [collapsedSections, setCollapsedSections] = useState({});
   const [toast, setToast] = useState(null);
 
-  // ADDED: Technical RFQ specific state
+  // Technical RFQ specific state
   const [rfqItems, setRfqItems] = useState([]);
   const [currentRfqItem, setCurrentRfqItem] = useState({
     description: "",
@@ -87,6 +87,7 @@ const CreateProposalModal = ({
     partNumber: "",
     unit: "each",
     quantity: 1,
+    unitPrice: 0,
     willBeSupplied: "",
     specifications: [""],
     imageUrl: ""
@@ -112,26 +113,26 @@ const CreateProposalModal = ({
         discount: 0,
         taxRate: 10,
         status: "draft",
-        templateType: "simple",
+        templateType: "simple-commercial",
         documentNumber: "",
         companyDetails: {
           name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
-          address: "",
-          phone: "",
-          email: "",
-          bankAccount: "",
-          mfo: "",
-          taxId: "",
-          oked: ""
+          address: "Tashkent city, Yunusabad district, Bogishamol 21B",
+          phone: "+998 90 122 55 18",
+          email: "info@emctech.uz",
+          bankAccount: "2020 8000 0052 8367 7001",
+          mfo: "00419",
+          taxId: "307 738 207",
+          oked: "43299"
         },
         deliveryTerms: {
           paymentTerms: "50% prepayment",
-          deliveryTime: "6-8 weeks",
+          deliveryTime: "6-12 weeks",
           incoterms: "DDP"
         },
         authorizedSignatory: {
           title: "General manager",
-          name: ""
+          name: "S.S. Abdushukurov"
         }
       });
       setSelectedProducts([]);
@@ -191,17 +192,41 @@ const CreateProposalModal = ({
     }, 3000);
   };
 
+  // DEBUG: log incoming products (remove after verification)
   useEffect(() => {
-    if (open) {
-      console.log('Available products in modal:', availableProducts);
-      console.log('Available products count:', availableProducts.length);
+    console.log('CreateProposalModal: availableProducts type/length:', Array.isArray(availableProducts) ? availableProducts.length : typeof availableProducts);
+    if (Array.isArray(availableProducts) && availableProducts.length > 0) {
+      console.log('CreateProposalModal: sample products:', availableProducts.slice(0, 6));
     }
-  }, [open, availableProducts]);
+  }, [availableProducts]);
 
-  const filteredProducts = availableProducts.filter(product =>
-    product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.category?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // After props/state, normalize incoming products once:
+  const normalizedAvailableProducts = (availableProducts || []).map(p => ({
+    ...p,
+    // normalize name map -> string
+    name: (typeof p?.name === "string")
+      ? p.name
+      : (p?.name?.EN || p?.name?.en || Object.values(p?.name || {})[0] || p?.title || p?.slug || ""),
+    // normalize image field
+    imageUrl: p.imageUrl || p.thumbnail || p.thumbnailUrl || (p.images && p.images[0]) || ""
+  }));
+
+  // Defensive searchTerm (if you already have a searchTerm state, keep using it)
+  const normalizedSearch = (typeof searchTerm !== 'undefined' ? (searchTerm || '') : '').toString().trim().toLowerCase();
+
+  // Compute filteredProducts defensively (won't throw if fields missing)
+  const filteredProducts = normalizedAvailableProducts.filter(product => {
+    if (!normalizedSearch) return true;
+    const name = (product?.name || '').toString().toLowerCase();
+    const category = (product?.category || '').toString().toLowerCase();
+    const desc = (product?.description || '').toString().toLowerCase();
+    return name.includes(normalizedSearch) || category.includes(normalizedSearch) || desc.includes(normalizedSearch);
+  });
+
+  // DEBUG: confirm filteredProducts
+  useEffect(() => {
+    console.log('CreateProposalModal: filteredProducts length:', filteredProducts.length);
+  }, [filteredProducts]);
 
   // Handle proposal input changes
   const handleProposalChange = (e) => {
@@ -212,7 +237,7 @@ const CreateProposalModal = ({
     }));
   };
 
-  // ADDED: Handle nested object changes for Technical RFQ
+  // Handle nested object changes
   const handleNestedChange = (section, field, value) => {
     setProposal(prev => ({
       ...prev,
@@ -269,44 +294,47 @@ const CreateProposalModal = ({
   };
 
   // Add product to proposal
-  const handleAddProduct = (product) => {
-    const quantity = parseInt(quantityInputs[product.id]) || 1;
-    const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
-    const discount = parseFloat(discountInputs[product.id]) || 0;
-    const taxable = taxToggle[product.id] !== false;
-    
-    if (quantity <= 0) {
-      alert("Quantity must be greater than 0");
-      return;
-    }
+ // In CreateProposalModal - update the handleAddProduct function
+const handleAddProduct = (product) => {
+  const quantity = parseInt(quantityInputs[product.id]) || 1;
+  const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
+  const discount = parseFloat(discountInputs[product.id]) || 0;
+  const taxable = taxToggle[product.id] !== false;
+  
+  if (quantity <= 0) {
+    showToast("Quantity must be greater than 0", 'error');
+    return;
+  }
 
-    const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
-    
-    if (existingProductIndex >= 0) {
-      const updatedProducts = [...selectedProducts];
-      updatedProducts[existingProductIndex].quantity += quantity;
-      setSelectedProducts(updatedProducts);
-    } else {
-      setSelectedProducts(prev => [...prev, {
-        ...product,
-        quantity,
-        unitPrice,
-        discount,
-        taxable,
-        lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
-      }]);
-    }
-    
-    // Reset inputs for this product
-    setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
-    setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
-    setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
-    setTaxToggle(prev => ({ ...prev, [product.id]: true }));
-    
-    showToast(`Added ${product.name} to proposal`, 'success');
-  };
+  const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
+  
+  if (existingProductIndex >= 0) {
+    const updatedProducts = [...selectedProducts];
+    updatedProducts[existingProductIndex].quantity += quantity;
+    setSelectedProducts(updatedProducts);
+  } else {
+    setSelectedProducts(prev => [...prev, {
+      ...product,
+      // FIX: Ensure imageUrl is properly set
+      imageUrl: product.imageUrl || product.thumbnail || '',
+      quantity,
+      unitPrice,
+      discount,
+      taxable,
+      lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
+    }]);
+  }
+  
+  // Reset inputs for this product
+  setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
+  setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
+  setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
+  setTaxToggle(prev => ({ ...prev, [product.id]: true }));
+  
+  showToast(`Added ${product.name} to proposal`, 'success');
+};
 
-  // ADDED: Handle Technical RFQ item changes
+  // Handle Technical RFQ item changes
   const handleRfqItemChange = (field, value) => {
     setCurrentRfqItem(prev => ({
       ...prev,
@@ -314,7 +342,7 @@ const CreateProposalModal = ({
     }));
   };
 
-  // ADDED: Handle RFQ specification changes
+  // Handle RFQ specification changes
   const handleRfqSpecificationChange = (index, value) => {
     const updatedSpecs = [...currentRfqItem.specifications];
     updatedSpecs[index] = value;
@@ -324,7 +352,7 @@ const CreateProposalModal = ({
     }));
   };
 
-  // ADDED: Add RFQ specification field
+  // Add RFQ specification field
   const addRfqSpecification = () => {
     setCurrentRfqItem(prev => ({
       ...prev,
@@ -332,7 +360,7 @@ const CreateProposalModal = ({
     }));
   };
 
-  // ADDED: Remove RFQ specification field
+  // Remove RFQ specification field
   const removeRfqSpecification = (index) => {
     if (currentRfqItem.specifications.length > 1) {
       const updatedSpecs = currentRfqItem.specifications.filter((_, i) => i !== index);
@@ -343,7 +371,7 @@ const CreateProposalModal = ({
     }
   };
 
-  // ADDED: Add RFQ item
+  // Add RFQ item
   const addRfqItem = () => {
     if (!currentRfqItem.description) {
       showToast('Item description is required', 'error');
@@ -353,7 +381,8 @@ const CreateProposalModal = ({
     const newItem = {
       ...currentRfqItem,
       id: Date.now(),
-      itemNumber: rfqItems.length + 1
+      itemNumber: rfqItems.length + 1,
+      lineTotal: (currentRfqItem.unitPrice || 0) * (currentRfqItem.quantity || 1)
     };
 
     setRfqItems(prev => [...prev, newItem]);
@@ -366,6 +395,7 @@ const CreateProposalModal = ({
       partNumber: "",
       unit: "each",
       quantity: 1,
+      unitPrice: 0,
       willBeSupplied: "",
       specifications: [""],
       imageUrl: ""
@@ -374,7 +404,7 @@ const CreateProposalModal = ({
     showToast('Technical item added successfully', 'success');
   };
 
-  // ADDED: Remove RFQ item
+  // Remove RFQ item
   const removeRfqItem = (itemId) => {
     setRfqItems(prev => prev.filter(item => item.id !== itemId));
     showToast('Technical item removed', 'info');
@@ -451,25 +481,51 @@ const CreateProposalModal = ({
     }
   };
 
-  // Calculate totals
-  const subtotal = selectedProducts.reduce((sum, product) => 
-    sum + (product.unitPrice * product.quantity), 0
-  );
+  // Calculate totals based on template type
+  const calculateTotals = () => {
+    if (proposal.templateType === 'technical-rfq' || proposal.templateType === 'technical-with-images') {
+      // Calculate totals for technical RFQ items
+      const subtotal = rfqItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+      const taxAmount = subtotal * (proposal.taxRate / 100);
+      const grandTotal = subtotal + taxAmount;
+      
+      return {
+        subtotal,
+        totalDiscount: 0,
+        taxAmount,
+        grandTotal
+      };
+    } else {
+      // Calculate totals for commercial products
+      const subtotal = selectedProducts.reduce((sum, product) => 
+        sum + (product.unitPrice * product.quantity), 0
+      );
 
-  const totalDiscount = selectedProducts.reduce((sum, product) => 
-    sum + (product.unitPrice * product.quantity * (product.discount / 100)), 0
-  );
+      const totalDiscount = selectedProducts.reduce((sum, product) => 
+        sum + (product.unitPrice * product.quantity * (product.discount / 100)), 0
+      );
 
-  const taxableSubtotal = selectedProducts
-    .filter(product => product.taxable)
-    .reduce((sum, product) => {
-      const productSubtotal = product.unitPrice * product.quantity;
-      const productDiscount = productSubtotal * (product.discount / 100);
-      return sum + (productSubtotal - productDiscount);
-    }, 0);
+      const taxableSubtotal = selectedProducts
+        .filter(product => product.taxable)
+        .reduce((sum, product) => {
+          const productSubtotal = product.unitPrice * product.quantity;
+          const productDiscount = productSubtotal * (product.discount / 100);
+          return sum + (productSubtotal - productDiscount);
+        }, 0);
 
-  const taxAmount = taxableSubtotal * (proposal.taxRate / 100);
-  const grandTotal = subtotal - totalDiscount + taxAmount;
+      const taxAmount = taxableSubtotal * (proposal.taxRate / 100);
+      const grandTotal = subtotal - totalDiscount + taxAmount;
+      
+      return {
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        grandTotal
+      };
+    }
+  };
+
+  const { subtotal, totalDiscount, taxAmount, grandTotal } = calculateTotals();
 
   // Format currency
   const formatCurrency = (amount) => {
@@ -491,148 +547,87 @@ const CreateProposalModal = ({
     setActivityLog(prev => [newEntry, ...prev]);
   };
 
-  // Generate PDF (simulated)
-  const handleGeneratePDF = () => {
-    if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
-      showToast('Please add technical items before generating PDF', 'error');
-      return;
+  // Generate PDF
+  const handleGeneratePDF = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Validate based on template type
+      if (proposal.templateType.includes('commercial') && selectedProducts.length === 0) {
+        showToast('Please add products before generating PDF', 'error');
+        return;
+      }
+      
+      if (proposal.templateType.includes('technical') && rfqItems.length === 0) {
+        showToast('Please add technical items before generating PDF', 'error');
+        return;
+      }
+
+      const payload = {
+        proposal,
+        selectedProducts,
+        rfqItems,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        grandTotal,
+        formatCurrency
+      };
+      
+      await downloadProposalPdf(payload);
+      showToast('PDF generated successfully', 'success');
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      showToast('Failed to generate PDF: ' + err.message, 'error');
+    } finally {
+      setIsLoading(false);
     }
-    if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
-      showToast('Please add products before generating PDF', 'error');
-      return;
-    }
-    setIsPdfPreviewOpen(true);
-    addActivityLog("PDF preview generated", "You");
-    showToast('PDF preview generated', 'success');
   };
 
   // Save proposal
- // Save proposal - FIXED VERSION
-const handleSaveProposal = async (status = 'draft') => {
-  // Validate based on template type
-  if (proposal.templateType === 'simple' && selectedProducts.length === 0) {
-    showToast('Please add at least one product to the proposal', 'error');
-    return;
-  }
-
-  if (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) {
-    showToast('Please add at least one technical item to the proposal', 'error');
-    return;
-  }
-
-  if (!proposal.clientId) {
-    showToast('Please select a client for the proposal', 'error');
-    return;
-  }
-
-  if (!proposal.proposalTitle) {
-    showToast('Please enter a proposal title', 'error');
-    return;
-  }
-
-  try {
-    let proposalData;
-
-    if (proposal.templateType === 'technical-rfq') {
-      // Technical RFQ data structure - FIXED
-      proposalData = {
-        clientId: proposal.clientId, // ADDED: This is required by Firebase hook
-        proposalTitle: proposal.proposalTitle, // ADDED: This is required by Firebase hook
-        proposalNumber: proposal.proposalNumber,
-        clientName: proposal.clientName,
-        clientEmail: proposal.clientEmail,
-        company: proposal.company,
-        proposalDate: proposal.proposalDate,
-        validUntil: proposal.validUntil,
-        terms: proposal.terms,
-        notes: proposal.notes,
-        taxRate: proposal.taxRate,
-        status: status,
-        templateType: proposal.templateType,
-        documentNumber: proposal.documentNumber,
-        companyDetails: proposal.companyDetails,
-        deliveryTerms: proposal.deliveryTerms,
-        authorizedSignatory: proposal.authorizedSignatory,
-        items: rfqItems,
-        // Include products array for compatibility (even if empty)
-        products: selectedProducts.map(p => ({
-          id: p.id || `prod_${Date.now()}`,
-          name: p.name || 'Unnamed Product',
-          category: p.category || 'Uncategorized',
-          quantity: p.quantity || 1,
-          unitPrice: p.unitPrice || 0,
-          discount: p.discount || 0,
-          taxable: p.taxable !== undefined ? p.taxable : true,
-          lineTotal: p.lineTotal || 0
-        })),
-        subtotal: subtotal,
-        totalDiscount: totalDiscount,
-        taxAmount: taxAmount,
-        grandTotal: grandTotal
-      };
-    } else {
-      // Simple proposal data structure - FIXED
-      proposalData = {
-        clientId: proposal.clientId, // This is required
-        proposalTitle: proposal.proposalTitle, // This is required
-        proposalNumber: proposal.proposalNumber,
-        clientName: proposal.clientName,
-        clientEmail: proposal.clientEmail,
-        company: proposal.company,
-        proposalDate: proposal.proposalDate,
-        validUntil: proposal.validUntil,
-        terms: proposal.terms,
-        notes: proposal.notes,
-        taxRate: proposal.taxRate,
-        status: status,
-        templateType: proposal.templateType,
-        products: selectedProducts.map(p => ({
-          id: p.id || `prod_${Date.now()}`,
-          name: p.name || 'Unnamed Product',
-          category: p.category || 'Uncategorized',
-          quantity: p.quantity || 1,
-          unitPrice: p.unitPrice || 0,
-          discount: p.discount || 0,
-          taxable: p.taxable !== undefined ? p.taxable : true,
-          lineTotal: p.lineTotal || 0
-        })),
-        subtotal: subtotal,
-        totalDiscount: totalDiscount,
-        taxAmount: taxAmount,
-        grandTotal: grandTotal
-      };
+  const handleSaveProposal = async (status = 'draft') => {
+    if (typeof onSave !== 'function') {
+      console.warn('onSave handler not provided');
+      showToast('Save handler not available', 'error');
+      return;
     }
 
-    console.log('Saving proposal data:', proposalData); // Debug log
-    await onSave(proposalData);
-    showToast(`Proposal ${status === 'draft' ? 'saved as draft' : 'sent'} successfully!`, 'success');
+    // Validate based on template type
+    if (proposal.templateType.includes('commercial') && selectedProducts.length === 0) {
+      showToast('Please add products before saving', 'error');
+      return;
+    }
     
-    if (status === 'sent') {
-      onClose();
+    if (proposal.templateType.includes('technical') && rfqItems.length === 0) {
+      showToast('Please add technical items before saving', 'error');
+      return;
     }
-  } catch (error) {
-    console.error('Error saving proposal:', error);
-    showToast('Error saving proposal: ' + error.message, 'error');
-  }
-};
 
- // Send proposal via email - FIXED
-const handleSendProposal = async () => {
-  if (!emailData.to && !proposal.clientEmail) {
-    showToast('Please enter an email address', 'error');
-    return;
-  }
-  
-  try {
-    // Save the proposal first, then send email
-    await handleSaveProposal("sent");
-    setIsEmailModalOpen(false);
-    addActivityLog("Proposal sent via email", "You", `To: ${emailData.to || proposal.clientEmail}`);
-    showToast('Proposal sent successfully!', 'success');
-  } catch (error) {
-    showToast('Error sending proposal: ' + error.message, 'error');
-  }
-};
+    if (!proposal.clientId || !proposal.proposalTitle) {
+      showToast('Please fill in all required fields', 'error');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const payload = {
+        ...proposal,
+        status,
+        products: selectedProducts,
+        rfqItems,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        grandTotal
+      };
+      await onSave(payload);
+    } catch (err) {
+      console.error('Error saving proposal:', err);
+      showToast(`Error saving proposal: ${err.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Reset form
   const handleResetForm = () => {
@@ -651,26 +646,26 @@ const handleSendProposal = async () => {
         discount: 0,
         taxRate: 10,
         status: "draft",
-        templateType: "simple",
+        templateType: "simple-commercial",
         documentNumber: "",
         companyDetails: {
           name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
-          address: "",
-          phone: "",
-          email: "",
-          bankAccount: "",
-          mfo: "",
-          taxId: "",
-          oked: ""
+          address: "Tashkent city, Yunusabad district, Bogishamol 21B",
+          phone: "+998 90 122 55 18",
+          email: "info@emctech.uz",
+          bankAccount: "2020 8000 0052 8367 7001",
+          mfo: "00419",
+          taxId: "307 738 207",
+          oked: "43299"
         },
         deliveryTerms: {
           paymentTerms: "50% prepayment",
-          deliveryTime: "6-8 weeks",
+          deliveryTime: "6-12 weeks",
           incoterms: "DDP"
         },
         authorizedSignatory: {
           title: "General manager",
-          name: ""
+          name: "S.S. Abdushukurov"
         }
       });
       setSelectedProducts([]);
@@ -686,6 +681,21 @@ const handleSendProposal = async () => {
       ...prev,
       [section]: !prev[section]
     }));
+  };
+
+  // Check if current template uses products
+  const usesProducts = () => {
+    return proposal.templateType.includes('commercial');
+  };
+
+  // Check if current template uses technical items
+  const usesTechnicalItems = () => {
+    return proposal.templateType.includes('technical');
+  };
+
+  // Check if current template uses images
+  const usesImages = () => {
+    return proposal.templateType.includes('with-images');
   };
 
   if (!open) return null;
@@ -705,6 +715,15 @@ const handleSendProposal = async () => {
             <div className="flex items-center gap-4 mt-2">
               <p className="text-gray-600">Proposal #: {proposal.proposalNumber}</p>
               <div className="flex items-center gap-2 text-sm">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  proposal.templateType.includes('commercial') 
+                    ? 'bg-blue-100 text-blue-800' 
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {proposal.templateType.split('-').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                  ).join(' ')}
+                </span>
                 {autoSaveStatus === "saving" && (
                   <span className="text-orange-500 flex items-center">
                     <FaExclamationTriangle className="mr-1" /> Saving...
@@ -740,33 +759,48 @@ const handleSendProposal = async () => {
               >
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                    <FaFileAlt className="mr-2 text-blue-500" /> Proposal Template
+                    <FaFileContract className="mr-2 text-blue-500" /> Proposal Template
                   </h2>
                 </div>
                 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Template Type
-                  </label>
-                  <select
-                    value={proposal.templateType || 'simple'}
-                    onChange={(e) => handleProposalChange(e)}
-                    name="templateType"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="simple">Simple Proposal</option>
-                    <option value="technical-rfq">Technical RFQ</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Template Type
+                    </label>
+                    <select
+                      value={proposal.templateType}
+                      onChange={(e) => handleProposalChange(e)}
+                      name="templateType"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="simple-commercial">Simple Commercial Offer</option>
+                      <option value="technical-rfq">Technical RFQ</option>
+                      <option value="commercial-with-images">Commercial Offer with Images</option>
+                      <option value="technical-with-images">Technical Offer with Images</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Template Description
+                    </label>
+                    <div className="text-sm text-gray-600 p-2 bg-gray-50 rounded border">
+                      {proposal.templateType === 'simple-commercial' && 'Clean commercial proposal without product images'}
+                      {proposal.templateType === 'technical-rfq' && 'Technical request for quotation format'}
+                      {proposal.templateType === 'commercial-with-images' && 'Commercial proposal with product images'}
+                      {proposal.templateType === 'technical-with-images' && 'Technical offer with item images and specs'}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Technical RFQ Fields */}
-                {proposal.templateType === 'technical-rfq' && (
-                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                    <h4 className="font-semibold text-blue-800 mb-2 flex items-center">
-                      <FaIndustry className="mr-2" /> Technical RFQ Details
+                {(proposal.templateType === 'technical-rfq' || proposal.templateType === 'technical-with-images') && (
+                  <div className="bg-blue-50 p-4 rounded-lg mt-4">
+                    <h4 className="font-semibold text-blue-800 mb-3 flex items-center">
+                      <FaIndustry className="mr-2" /> Technical Document Details
                     </h4>
                     
-                    {/* Document Number */}
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -775,7 +809,7 @@ const handleSendProposal = async () => {
                         <input
                           type="text"
                           required
-                          value={proposal.documentNumber || ''}
+                          value={proposal.documentNumber}
                           onChange={(e) => handleProposalChange(e)}
                           name="documentNumber"
                           placeholder="e.g., 50/63440"
@@ -790,7 +824,7 @@ const handleSendProposal = async () => {
                         <input
                           type="text"
                           required
-                          value={proposal.companyDetails?.name || ''}
+                          value={proposal.companyDetails?.name}
                           onChange={(e) => handleNestedChange('companyDetails', 'name', e.target.value)}
                           placeholder="LLC «COMPANY NAME»"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -806,7 +840,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.companyDetails?.address || ''}
+                          value={proposal.companyDetails?.address}
                           onChange={(e) => handleNestedChange('companyDetails', 'address', e.target.value)}
                           placeholder="Full company address"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -819,7 +853,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.companyDetails?.phone || ''}
+                          value={proposal.companyDetails?.phone}
                           onChange={(e) => handleNestedChange('companyDetails', 'phone', e.target.value)}
                           placeholder="+998 90 122 55 16"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -835,7 +869,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.companyDetails?.bankAccount || ''}
+                          value={proposal.companyDetails?.bankAccount}
                           onChange={(e) => handleNestedChange('companyDetails', 'bankAccount', e.target.value)}
                           placeholder="2020 8000 0052 8367 7001"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -848,7 +882,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.companyDetails?.mfo || ''}
+                          value={proposal.companyDetails?.mfo}
                           onChange={(e) => handleNestedChange('companyDetails', 'mfo', e.target.value)}
                           placeholder="00419"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -861,7 +895,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.companyDetails?.taxId || ''}
+                          value={proposal.companyDetails?.taxId}
                           onChange={(e) => handleNestedChange('companyDetails', 'taxId', e.target.value)}
                           placeholder="307 738 207"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -877,7 +911,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.deliveryTerms?.paymentTerms || ''}
+                          value={proposal.deliveryTerms?.paymentTerms}
                           onChange={(e) => handleNestedChange('deliveryTerms', 'paymentTerms', e.target.value)}
                           placeholder="50% prepayment"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -890,7 +924,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.deliveryTerms?.deliveryTime || ''}
+                          value={proposal.deliveryTerms?.deliveryTime}
                           onChange={(e) => handleNestedChange('deliveryTerms', 'deliveryTime', e.target.value)}
                           placeholder="6-8 weeks"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -902,7 +936,7 @@ const handleSendProposal = async () => {
                           Incoterms
                         </label>
                         <select
-                          value={proposal.deliveryTerms?.incoterms || 'DDP'}
+                          value={proposal.deliveryTerms?.incoterms}
                           onChange={(e) => handleNestedChange('deliveryTerms', 'incoterms', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
                         >
@@ -922,7 +956,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.authorizedSignatory?.title || ''}
+                          value={proposal.authorizedSignatory?.title}
                           onChange={(e) => handleNestedChange('authorizedSignatory', 'title', e.target.value)}
                           placeholder="General manager"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -935,7 +969,7 @@ const handleSendProposal = async () => {
                         </label>
                         <input
                           type="text"
-                          value={proposal.authorizedSignatory?.name || ''}
+                          value={proposal.authorizedSignatory?.name}
                           onChange={(e) => handleNestedChange('authorizedSignatory', 'name', e.target.value)}
                           placeholder="S.S. Abdushukurov"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -1004,7 +1038,7 @@ const handleSendProposal = async () => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Proposal Title</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Proposal Title *</label>
                       <input
                         type="text"
                         name="proposalTitle"
@@ -1012,6 +1046,7 @@ const handleSendProposal = async () => {
                         onChange={handleProposalChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="Enter proposal title"
+                        required
                       />
                     </div>
                     
@@ -1030,8 +1065,8 @@ const handleSendProposal = async () => {
               </motion.div>
 
               {/* Product/Item Selection based on Template Type */}
-              {proposal.templateType === 'simple' ? (
-                // Simple Proposal Product Selection
+              {usesProducts() ? (
+                // Commercial Templates Product Selection
                 <motion.div
                   className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
                   initial={{ opacity: 0 }}
@@ -1040,7 +1075,8 @@ const handleSendProposal = async () => {
                 >
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                      <FaShoppingCart className="mr-2 text-blue-500" /> Product Selection
+                      <FaShoppingCart className="mr-2 text-blue-500" /> 
+                      {usesImages() ? 'Product Catalog with Images' : 'Product Selection'}
                     </h2>
                     <div className="flex gap-2">
                       <button
@@ -1076,6 +1112,7 @@ const handleSendProposal = async () => {
                           <table className="min-w-full">
                             <thead>
                               <tr className="border-b border-gray-200">
+                                {usesImages() && <th className="text-left p-3 text-sm font-medium text-gray-600">Image</th>}
                                 <th className="text-left p-3 text-sm font-medium text-gray-600">Item Name</th>
                                 <th className="text-left p-3 text-sm font-medium text-gray-600">Qty</th>
                                 <th className="text-left p-3 text-sm font-medium text-gray-600">Unit Price</th>
@@ -1095,6 +1132,24 @@ const handleSendProposal = async () => {
                                     exit={{ opacity: 0 }}
                                     className="border-b border-gray-100"
                                   >
+                                    {usesImages() && (
+                                      <td className="p-3">
+                                        {product.imageUrl ? (
+                                          <img 
+                                            src={product.imageUrl} 
+                                            alt={product.name}
+                                            className="w-12 h-12 object-cover rounded border"
+                                            onError={(e) => {
+                                              e.target.style.display = 'none';
+                                            }}
+                                          />
+                                        ) : (
+                                          <div className="w-12 h-12 bg-gray-200 rounded border flex items-center justify-center">
+                                            <FaImage className="text-gray-400" />
+                                          </div>
+                                        )}
+                                      </td>
+                                    )}
                                     <td className="p-3">
                                       <div>
                                         <div className="font-medium text-gray-900">{product.name}</div>
@@ -1171,7 +1226,7 @@ const handleSendProposal = async () => {
                   )}
                 </motion.div>
               ) : (
-                // Technical RFQ Item Selection
+                // Technical Templates Item Selection
                 <motion.div
                   className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
                   initial={{ opacity: 0 }}
@@ -1180,7 +1235,8 @@ const handleSendProposal = async () => {
                 >
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                      <FaIndustry className="mr-2 text-blue-500" /> Technical Items
+                      <FaIndustry className="mr-2 text-blue-500" /> 
+                      {usesImages() ? 'Technical Items with Images' : 'Technical Items'}
                     </h2>
                     <div className="flex gap-2">
                       <button
@@ -1272,7 +1328,7 @@ const handleSendProposal = async () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-3 gap-4 mb-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Quantity
@@ -1288,6 +1344,20 @@ const handleSendProposal = async () => {
                           
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unit Price ($)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={currentRfqItem.unitPrice}
+                              onChange={(e) => handleRfqItemChange('unitPrice', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Will be Supplied
                             </label>
                             <input
@@ -1299,6 +1369,33 @@ const handleSendProposal = async () => {
                             />
                           </div>
                         </div>
+
+                        {usesImages() && (
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Image URL
+                            </label>
+                            <input
+                              type="url"
+                              value={currentRfqItem.imageUrl}
+                              onChange={(e) => handleRfqItemChange('imageUrl', e.target.value)}
+                              placeholder="https://example.com/image.jpg"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                            {currentRfqItem.imageUrl && (
+                              <div className="mt-2">
+                                <img 
+                                  src={currentRfqItem.imageUrl} 
+                                  alt="Preview"
+                                  className="h-20 object-cover rounded border"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Specifications */}
                         <div className="mb-4">
@@ -1353,9 +1450,24 @@ const handleSendProposal = async () => {
                           {rfqItems.map((item, index) => (
                             <div key={item.id} className="border border-gray-200 rounded-lg p-4">
                               <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <h5 className="font-semibold text-gray-900">{item.description}</h5>
-                                  <p className="text-sm text-gray-600">{item.technicalDescription}</p>
+                                <div className="flex items-start gap-3">
+                                  {usesImages() && item.imageUrl && (
+                                    <img 
+                                      src={item.imageUrl} 
+                                      alt={item.description}
+                                      className="w-16 h-16 object-cover rounded border"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                      }}
+                                    />
+                                  )}
+                                  <div>
+                                    <h5 className="font-semibold text-gray-900">{item.description}</h5>
+                                    <p className="text-sm text-gray-600">{item.technicalDescription}</p>
+                                    <p className="text-sm font-medium text-green-600">
+                                      {formatCurrency(item.unitPrice)} × {item.quantity} = {formatCurrency(item.lineTotal)}
+                                    </p>
+                                  </div>
                                 </div>
                                 <button
                                   onClick={() => removeRfqItem(item.id)}
@@ -1455,10 +1567,12 @@ const handleSendProposal = async () => {
                     <span className="font-medium">{formatCurrency(subtotal)}</span>
                   </div>
                   
-                  <div className="flex justify-between text-red-600">
-                    <span className="text-gray-600">Discounts</span>
-                    <span className="font-medium">-{formatCurrency(totalDiscount)}</span>
-                  </div>
+                  {usesProducts() && (
+                    <div className="flex justify-between text-red-600">
+                      <span className="text-gray-600">Discounts</span>
+                      <span className="font-medium">-{formatCurrency(totalDiscount)}</span>
+                    </div>
+                  )}
                   
                   <div className="flex justify-between">
                     <span className="text-gray-600">Tax ({proposal.taxRate}%)</span>
@@ -1492,19 +1606,21 @@ const handleSendProposal = async () => {
                     onClick={handleGeneratePDF}
                     className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center font-medium"
                     disabled={
-                      (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-                      (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+                      (usesProducts() && selectedProducts.length === 0) ||
+                      (usesTechnicalItems() && rfqItems.length === 0)
                     }
                   >
-                    <FaFilePdf className="mr-2" /> Preview PDF
+                    <FaFilePdf className="mr-2" /> Generate PDF
                   </button>
 
                   <button
                     onClick={() => handleSaveProposal("draft")}
                     className="w-full bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center justify-center font-medium"
                     disabled={
-                      (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-                      (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)
+                      (usesProducts() && selectedProducts.length === 0) ||
+                      (usesTechnicalItems() && rfqItems.length === 0) ||
+                      !proposal.clientId ||
+                      !proposal.proposalTitle
                     }
                   >
                     <FaSave className="mr-2" /> Save Draft
@@ -1512,9 +1628,9 @@ const handleSendProposal = async () => {
 
                   <button
                     onClick={() => {
-                      if ((proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-                          (proposal.templateType === 'technical-rfq' && rfqItems.length === 0)) {
-                        showToast(`Please add ${proposal.templateType === 'simple' ? 'products' : 'technical items'} before sending`, 'error');
+                      if ((usesProducts() && selectedProducts.length === 0) ||
+                          (usesTechnicalItems() && rfqItems.length === 0)) {
+                        showToast(`Please add ${usesProducts() ? 'products' : 'technical items'} before sending`, 'error');
                         return;
                       }
                       if (!proposal.clientEmail && !proposal.clientId) {
@@ -1537,12 +1653,53 @@ const handleSendProposal = async () => {
                 </div>
               </motion.div>
 
-              {/* Activity Log */}
+              {/* Template Info */}
               <motion.div
                 className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.5 }}
+              >
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                  <FaFileAlt className="mr-2 text-blue-500" /> Template Info
+                </h2>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      usesImages() ? 'bg-green-500' : 'bg-gray-400'
+                    }`}></div>
+                    <span>{usesImages() ? 'Includes product images' : 'No product images'}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${
+                      usesTechnicalItems() ? 'bg-green-500' : 'bg-gray-400'
+                    }`}></div>
+                    <span>{usesTechnicalItems() ? 'Technical format' : 'Commercial format'}</span>
+                  </div>
+                  
+                  <div className="pt-3 border-t border-gray-200">
+                    <p className="text-gray-600">
+                      {proposal.templateType === 'simple-commercial' && 
+                        'Clean, professional commercial proposal without product images. Best for simple quotes.'}
+                      {proposal.templateType === 'technical-rfq' && 
+                        'Technical request for quotation format with detailed specifications. Best for industrial equipment.'}
+                      {proposal.templateType === 'commercial-with-images' && 
+                        'Commercial proposal with product images. Best for product catalogs and visual presentations.'}
+                      {proposal.templateType === 'technical-with-images' && 
+                        'Technical offer with item images and detailed specifications. Best for complex technical proposals.'}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Activity Log */}
+              <motion.div
+                className="bg-white rounded-xl shadow-lg p-6 border border-gray-200"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.6 }}
               >
                 <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                   <FaHistory className="mr-2 text-blue-500" /> Activity Log
@@ -1569,41 +1726,40 @@ const handleSendProposal = async () => {
         </div>
 
         {/* Footer Actions */}
-    {/* Footer Actions - UPDATED */}
-<div className="p-6 border-t border-gray-200 flex justify-between items-center">
-  <button
-    onClick={onClose}
-    className="px-6 py-3 text-gray-600 hover:text-gray-800 transition duration-200 font-medium"
-  >
-    Cancel
-  </button>
-  <div className="flex gap-3">
-    <button
-      onClick={() => handleSaveProposal("draft")}
-      className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
-      disabled={
-        (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-        (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) ||
-        !proposal.clientId ||
-        !proposal.proposalTitle
-      }
-    >
-      Save Draft
-    </button>
-    <button
-      onClick={() => handleSaveProposal("sent")}
-      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
-      disabled={
-        (proposal.templateType === 'simple' && selectedProducts.length === 0) ||
-        (proposal.templateType === 'technical-rfq' && rfqItems.length === 0) ||
-        !proposal.clientId ||
-        !proposal.proposalTitle
-      }
-    >
-      Save & Send
-    </button>
-  </div>
-</div>
+        <div className="p-6 border-t border-gray-200 flex justify-between items-center">
+          <button
+            onClick={onClose}
+            className="px-6 py-3 text-gray-600 hover:text-gray-800 transition duration-200 font-medium"
+          >
+            Cancel
+          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleSaveProposal("draft")}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
+              disabled={
+                (usesProducts() && selectedProducts.length === 0) ||
+                (usesTechnicalItems() && rfqItems.length === 0) ||
+                !proposal.clientId ||
+                !proposal.proposalTitle
+              }
+            >
+              Save Draft
+            </button>
+            <button
+              onClick={() => handleSaveProposal("sent")}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+              disabled={
+                (usesProducts() && selectedProducts.length === 0) ||
+                (usesTechnicalItems() && rfqItems.length === 0) ||
+                !proposal.clientId ||
+                !proposal.proposalTitle
+              }
+            >
+              Save & Send
+            </button>
+          </div>
+        </div>
       </motion.div>
 
       {/* Toast Notification */}
@@ -1665,24 +1821,6 @@ const handleSendProposal = async () => {
         )}
       </AnimatePresence>
 
-      {/* PDF Preview Modal */}
-      <AnimatePresence>
-        {isPdfPreviewOpen && (
-          <PDFPreviewModal
-            open={isPdfPreviewOpen}
-            onClose={() => setIsPdfPreviewOpen(false)}
-            proposal={proposal}
-            selectedProducts={selectedProducts}
-            rfqItems={rfqItems}
-            subtotal={subtotal}
-            totalDiscount={totalDiscount}
-            taxAmount={taxAmount}
-            grandTotal={grandTotal}
-            formatCurrency={formatCurrency}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Email Modal */}
       <AnimatePresence>
         {isEmailModalOpen && (
@@ -1692,7 +1830,7 @@ const handleSendProposal = async () => {
             proposal={proposal}
             emailData={emailData}
             onEmailDataChange={setEmailData}
-            onSendProposal={handleSendProposal}
+            onSendProposal={() => handleSaveProposal("sent")}
           />
         )}
       </AnimatePresence>
@@ -1700,7 +1838,7 @@ const handleSendProposal = async () => {
   );
 };
 
-// Sub-components (ClientModal, PDFPreviewModal, EmailModal) remain the same
+// Sub-components
 const ClientModal = ({ open, onClose, newClient, onNewClientChange, onAddClient }) => {
   if (!open) return null;
 
@@ -1786,569 +1924,6 @@ const ClientModal = ({ open, onClose, newClient, onNewClientChange, onAddClient 
   );
 };
 
-const PDFPreviewModal = ({ 
-  open, 
-  onClose, 
-  proposal, 
-  selectedProducts, 
-  rfqItems,
-  subtotal, 
-  totalDiscount, 
-  taxAmount, 
-  grandTotal, 
-  formatCurrency 
-}) => {
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  const handleDownloadPDF = async () => {
-    try {
-      setIsGenerating(true);
-      
-      const pdfData = {
-        ...proposal,
-        products: selectedProducts,
-        rfqItems: rfqItems,
-        selectedProducts: selectedProducts,
-        items: rfqItems,
-        subtotal,
-        totalDiscount,
-        taxAmount,
-        grandTotal,
-        templateType: proposal.templateType,
-        formatCurrency
-      };
-
-      if (proposal.templateType === 'technical-rfq') {
-        await downloadTechnicalRFQPdf(pdfData);
-      } else {
-        await downloadProposalPdf(pdfData);
-      }
-      
-      showToast('PDF downloaded successfully!', 'success');
-      
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      showToast('Error generating PDF. Please try again.', 'error');
-      // Fallback to print
-      handlePrint();
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handlePrint = () => {
-    const printContent = document.getElementById('pdf-preview-content');
-    const printWindow = window.open('', '_blank', 'width=1200,height=800');
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${proposal.templateType === 'technical-rfq' ? 'Technical RFQ' : 'Proposal'} ${proposal.proposalNumber}</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 20px;
-              color: #333;
-              font-size: 12px;
-            }
-            .header { 
-              border-bottom: 2px solid #003366; 
-              padding-bottom: 20px; 
-              margin-bottom: 20px;
-            }
-            .company-info h1 { 
-              margin: 0; 
-              color: #003366;
-              font-size: 16px;
-              font-weight: bold;
-            }
-            .proposal-info { 
-              background: #f8f8f8; 
-              padding: 15px; 
-              border-radius: 5px;
-              border: 1px solid #ddd;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin: 20px 0;
-              font-size: 10px;
-            }
-            th, td { 
-              border: 1px solid #808080; 
-              padding: 6px; 
-              text-align: left;
-              vertical-align: top;
-            }
-            th { 
-              background-color: #e8e8e8; 
-              color: #000;
-              font-weight: bold;
-              text-align: center;
-            }
-            .technical-item { 
-              border: 1px solid #808080; 
-              margin: 10px 0; 
-              padding: 10px;
-              background: #f9f9f9;
-            }
-            .technical-item h4 {
-              margin: 0 0 8px 0;
-              color: #003366;
-              font-size: 11px;
-              text-transform: uppercase;
-            }
-            .signature-section {
-              margin-top: 40px;
-              border-top: 1px solid #808080;
-              padding-top: 20px;
-            }
-            .notes-section {
-              margin: 20px 0;
-              padding: 10px;
-              background: #f8f8f8;
-              border-left: 3px solid #003366;
-            }
-            .summary-table {
-              width: 300px;
-              margin-left: auto;
-              border: 1px solid #ddd;
-            }
-            .summary-table td {
-              padding: 8px;
-              border-bottom: 1px solid #eee;
-            }
-            .summary-table tr:last-child td {
-              border-bottom: none;
-              font-weight: bold;
-              background: #f5f5f5;
-            }
-            @media print {
-              body { margin: 10mm; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          ${printContent.innerHTML}
-        </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.onafterprint = () => printWindow.close();
-  };
-
-  if (!open) return null;
-
-  return (
-    <motion.div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-60"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
-    >
-      <motion.div
-        className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-screen overflow-hidden flex flex-col"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        style={{ minHeight: '90vh' }}
-      >
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
-          <h3 className="text-xl font-semibold text-gray-900 flex items-center">
-            <FaFilePdf className="mr-2 text-red-500" /> 
-            {proposal.templateType === 'technical-rfq' ? 'Technical RFQ Preview' : 'Proposal PDF Preview'}
-          </h3>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 bg-blue-100 px-2 py-1 rounded">
-              {proposal.templateType === 'technical-rfq' ? 'Technical RFQ' : 'Simple Proposal'}
-            </span>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition duration-200"
-            >
-              <FaTimes size={20} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-          <div id="pdf-preview-content" className="bg-white border border-gray-300 p-8 max-w-6xl mx-auto shadow-lg" style={{ fontSize: '12px' }}>
-            {proposal.templateType === 'technical-rfq' ? (
-              <TechnicalRFQPreviewContent 
-                proposal={proposal}
-                rfqItems={rfqItems}
-                formatCurrency={formatCurrency}
-              />
-            ) : (
-              <SimpleProposalPreviewContent
-                proposal={proposal}
-                selectedProducts={selectedProducts}
-                subtotal={subtotal}
-                totalDiscount={totalDiscount}
-                taxAmount={taxAmount}
-                grandTotal={grandTotal}
-                formatCurrency={formatCurrency}
-              />
-            )}
-          </div>
-        </div>
-        
-        <div className="p-6 border-t border-gray-200 flex justify-between items-center bg-white">
-          <div className="text-sm text-gray-600 flex items-center">
-            <FaExclamationTriangle className="mr-2 text-yellow-500" />
-            Preview may differ slightly from actual PDF
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-medium"
-            >
-              Close
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200 flex items-center font-medium"
-            >
-              <FaFilePdf className="mr-2" /> Print
-            </button>
-            <button
-              onClick={handleDownloadPDF}
-              disabled={isGenerating}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isGenerating ? (
-                <>
-                  <FaSpinner className="mr-2 animate-spin" /> Generating...
-                </>
-              ) : (
-                <>
-                  <FaDownload className="mr-2" /> Download PDF
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-// Technical RFQ Preview Component
-const TechnicalRFQPreviewContent = ({ proposal, rfqItems, formatCurrency }) => {
-  const formatDisplayDate = (dateString) => {
-    if (!dateString) return new Date().toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
-
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>
-      {/* Header */}
-      <div className="header">
-        <div style={{ marginBottom: '10px' }}>
-          <h1 style={{ margin: 0, color: '#003366', fontSize: '14px', fontWeight: 'bold' }}>
-            {proposal.companyDetails?.name || proposal.company}
-          </h1>
-          <div style={{ fontSize: '9px', lineHeight: '1.3' }}>
-            <div>{proposal.companyDetails?.address}</div>
-            <div>Phone: {proposal.companyDetails?.phone}</div>
-            <div>Email: {proposal.companyDetails?.email}</div>
-            <div>Bank Account: {proposal.companyDetails?.bankAccount}</div>
-            <div>MFO: {proposal.companyDetails?.mfo}</div>
-            <div>Tax ID: {proposal.companyDetails?.taxId}</div>
-            <div>OKED: {proposal.companyDetails?.oked}</div>
-          </div>
-        </div>
-        
-        <div style={{ textAlign: 'center', margin: '15px 0' }}>
-          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#003366' }}>№{proposal.documentNumber}</div>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#003366', marginTop: '5px' }}>COMMERCIAL OFFER</div>
-        </div>
-        
-        <div style={{ fontSize: '10px' }}>
-          <div>Date: {formatDisplayDate(proposal.proposalDate)}</div>
-          <div>To: {proposal.clientName}</div>
-        </div>
-      </div>
-
-      {/* Technical Items Table */}
-      {rfqItems.length > 0 && (
-        <div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
-            <thead>
-              <tr>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '5%' }}>№</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Technical Description of Requested Item</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '25%' }}>Material PO Text</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '8%' }}>Unit</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '10%' }}>Quantity Requested</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Technical Description</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Will be Supplied</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '20%' }}>Will be Supplied</th>
-                <th style={{ border: '1px solid #808080', padding: '4px', width: '15%' }}>PHOTO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rfqItems.map((item, index) => (
-                <tr key={item.id}>
-                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center', fontWeight: 'bold' }}>
-                    {index + 1}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                    {item.description}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
-                    {item.technicalDescription}
-                    {item.manufacturer && `; OEM/MAKE: ${item.manufacturer}`}
-                    {item.partNumber && `; Part No: ${item.partNumber}`}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
-                    {item.unit}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
-                    {item.quantity}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
-                    {item.willBeSupplied}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px', fontSize: '8px' }}>
-                    {item.specifications && item.specifications.filter(spec => spec.trim()).map((spec, idx) => (
-                      <div key={idx}>{idx + 1}. {spec}</div>
-                    ))}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px' }}>
-                    {item.willBeSupplied}
-                  </td>
-                  <td style={{ border: '1px solid #808080', padding: '4px', textAlign: 'center' }}>
-                    {item.imageUrl && (
-                      <img 
-                        src={item.imageUrl} 
-                        alt={item.description}
-                        style={{ maxWidth: '100%', maxHeight: '50px', objectFit: 'contain' }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Notes Section */}
-      <div className="notes-section">
-        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>NOTES:</div>
-        <div style={{ fontSize: '10px' }}>
-          <div>1. Terms of payment: {proposal.deliveryTerms?.paymentTerms}</div>
-          <div>2. Estimated delivery time: {proposal.deliveryTerms?.deliveryTime}</div>
-          <div>3. Terms of delivery: {proposal.deliveryTerms?.incoterms}</div>
-        </div>
-      </div>
-
-      {/* Signature Section */}
-      <div className="signature-section">
-        <div style={{ marginBottom: '30px' }}>
-          <div>{proposal.authorizedSignatory?.title}</div>
-          <div style={{ borderTop: '1px solid #000', width: '200px', marginTop: '20px', paddingTop: '5px' }}>
-            {proposal.authorizedSignatory?.name}
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ marginTop: '40px', fontSize: '8px', color: '#666', textAlign: 'center', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
-        <div>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</div>
-        <div>Document ID: {proposal.proposalNumber}</div>
-      </div>
-    </div>
-  );
-};
-
-// Simple Proposal Preview Component
-const SimpleProposalPreviewContent = ({ proposal, selectedProducts, subtotal, totalDiscount, taxAmount, grandTotal, formatCurrency }) => {
-  const formatDisplayDate = (dateString) => {
-    if (!dateString) return new Date().toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  };
-
-  return (
-    <div style={{ fontFamily: 'Arial, sans-serif', color: '#333' }}>
-      {/* Header */}
-      <div style={{ borderBottom: '2px solid #2d5aa0', paddingBottom: '20px', marginBottom: '20px' }}>
-        <div style={{ backgroundColor: '#2d5aa0', color: 'white', padding: '20px', margin: '-32px -32px 20px -32px' }}>
-          <h1 style={{ margin: 0, fontSize: '24px', textAlign: 'center' }}>PROPOSAL</h1>
-          <div style={{ textAlign: 'center', marginTop: '10px' }}>
-            <div style={{ fontSize: '14px' }}>Proposal #: {proposal.proposalNumber}</div>
-            <div style={{ fontSize: '12px' }}>Date: {formatDisplayDate(proposal.proposalDate)}</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-          <div>
-            <h3 style={{ margin: '0 0 10px 0', color: '#2d5aa0' }}>From:</h3>
-            <div style={{ fontSize: '11px' }}>
-              <div><strong>{proposal.company}</strong></div>
-              {proposal.companyDetails?.address && <div>{proposal.companyDetails.address}</div>}
-              {proposal.companyDetails?.phone && <div>Phone: {proposal.companyDetails.phone}</div>}
-              {proposal.companyDetails?.email && <div>Email: {proposal.companyDetails.email}</div>}
-            </div>
-          </div>
-          
-          <div>
-            <h3 style={{ margin: '0 0 10px 0', color: '#2d5aa0' }}>To:</h3>
-            <div style={{ fontSize: '11px' }}>
-              <div><strong>{proposal.clientName}</strong></div>
-              {proposal.clientEmail && <div>Email: {proposal.clientEmail}</div>}
-            </div>
-          </div>
-        </div>
-
-        {proposal.proposalTitle && (
-          <div style={{ textAlign: 'center', marginTop: '20px', padding: '15px', backgroundColor: '#e8f4ff', borderRadius: '5px' }}>
-            <h2 style={{ margin: 0, color: '#2d5aa0', fontSize: '18px' }}>{proposal.proposalTitle}</h2>
-          </div>
-        )}
-
-        {proposal.validUntil && (
-          <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '11px', color: '#666' }}>
-            Valid Until: {formatDisplayDate(proposal.validUntil)}
-          </div>
-        )}
-      </div>
-
-      {/* Products Table */}
-      {selectedProducts.length > 0 && (
-        <div style={{ marginBottom: '30px' }}>
-          <h3 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>PROPOSAL ITEMS</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#2d5aa0', color: 'white' }}>
-                <th style={{ padding: '8px', textAlign: 'left', border: '1px solid #1e3d6d' }}>Item Description</th>
-                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '8%' }}>Qty</th>
-                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid #1e3d6d', width: '12%' }}>Unit Price</th>
-                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '10%' }}>Disc. %</th>
-                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid #1e3d6d', width: '8%' }}>Tax</th>
-                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid #1e3d6d', width: '12%' }}>Line Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedProducts.map((product, index) => (
-                <tr key={product.id} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white' }}>
-                  <td style={{ padding: '8px', border: '1px solid #ddd' }}>
-                    <div style={{ fontWeight: 'bold' }}>{product.name}</div>
-                    {product.category && (
-                      <div style={{ fontSize: '9px', color: '#666' }}>{product.category}</div>
-                    )}
-                    {product.imageUrl && (
-                      <img 
-                        src={product.imageUrl} 
-                        alt={product.name}
-                        style={{ maxWidth: '50px', maxHeight: '50px', marginTop: '5px', objectFit: 'contain' }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    )}
-                  </td>
-                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.quantity}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #ddd' }}>{formatCurrency(product.unitPrice)}</td>
-                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.discount}%</td>
-                  <td style={{ padding: '8px', textAlign: 'center', border: '1px solid #ddd' }}>{product.taxable ? 'Yes' : 'No'}</td>
-                  <td style={{ padding: '8px', textAlign: 'right', border: '1px solid #ddd', fontWeight: 'bold' }}>
-                    {formatCurrency(product.lineTotal)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Summary Section */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
-        <table className="summary-table">
-          <tbody>
-            <tr>
-              <td>Subtotal:</td>
-              <td style={{ textAlign: 'right' }}>{formatCurrency(subtotal)}</td>
-            </tr>
-            <tr>
-              <td>Discounts:</td>
-              <td style={{ textAlign: 'right', color: '#d00' }}>-{formatCurrency(totalDiscount)}</td>
-            </tr>
-            <tr>
-              <td>Tax ({proposal.taxRate}%):</td>
-              <td style={{ textAlign: 'right' }}>{formatCurrency(taxAmount)}</td>
-            </tr>
-            <tr>
-              <td style={{ borderTop: '2px solid #2d5aa0', fontWeight: 'bold' }}>Grand Total:</td>
-              <td style={{ borderTop: '2px solid #2d5aa0', textAlign: 'right', fontWeight: 'bold', color: '#2d5aa0' }}>
-                {formatCurrency(grandTotal)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Terms and Notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
-        {proposal.terms && (
-          <div>
-            <h4 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Terms & Conditions</h4>
-            <div style={{ fontSize: '10px', lineHeight: '1.4' }}>
-              {proposal.terms.split('\n').map((line, index) => (
-                <div key={index}>{line}</div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {proposal.notes && (
-          <div>
-            <h4 style={{ color: '#2d5aa0', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Additional Notes</h4>
-            <div style={{ fontSize: '10px', lineHeight: '1.4' }}>
-              {proposal.notes.split('\n').map((line, index) => (
-                <div key={index}>{line}</div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div style={{ marginTop: '40px', fontSize: '8px', color: '#666', textAlign: 'center', borderTop: '1px solid #ddd', paddingTop: '10px' }}>
-        <div>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</div>
-        <div>Proposal ID: {proposal.proposalNumber} | Status: {proposal.status}</div>
-      </div>
-    </div>
-  );
-};
-
 const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onSendProposal }) => {
   if (!open) return null;
 
@@ -2359,12 +1934,13 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={onClose}
+
     >
       <motion.div
         className="bg-white rounded-xl shadow-2xl max-w-2xl w-full"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
+        exit={{ scale: 0.9, opacity:  0 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-200">

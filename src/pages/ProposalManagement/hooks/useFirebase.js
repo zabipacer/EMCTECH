@@ -7,6 +7,7 @@ import {
   updateDoc,
   deleteDoc,
   onSnapshot,
+  getDocs,
   query,
   where,
   orderBy,
@@ -29,65 +30,103 @@ export const useProducts = (user) => {
 
   useEffect(() => {
     console.log('useProducts hook called with user:', user);
-    
-    try {
-      const q = query(
-        productsCollection,
-        orderBy('createdAt', 'desc')
-      );
 
-      const unsubscribe = onSnapshot(q, 
-        (snapshot) => {
-          console.log('Firebase products snapshot received');
-          const productsData = snapshot.docs.map(doc => {
-            const data = doc.data();
-            console.log('Raw product data for ID', doc.id, ':', data);
-            
-            // Handle the nested name structure properly
-            let productName = 'Unnamed Product';
-            if (data.name) {
-              if (typeof data.name === 'string') {
-                productName = data.name;
-              } else if (data.name.EN) {
-                productName = data.name.EN;
-              } else if (typeof data.name === 'object') {
-                productName = data.name.EN || data.name.RU || data.name.UZ || 'Unnamed Product';
-              }
+    // Build query: prefer user-specific products, but fall back to all products
+    try {
+      let q;
+      if (user && user.uid) {
+        q = query(productsCollection, where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+      } else {
+        q = query(productsCollection, orderBy('createdAt', 'desc'));
+      }
+
+      const unsub = onSnapshot(q, (snapshot) => {
+        console.log('Firebase products snapshot received, docs:', snapshot.size);
+
+        // If user-scoped query returned no docs, attempt fallback to fetch all products once
+        if ((snapshot.size === 0) && user && user.uid) {
+          (async () => {
+            try {
+              console.log('User-scoped product query empty — fetching all products as fallback');
+              const allQ = query(productsCollection, orderBy('createdAt', 'desc'));
+              const allSnap = await getDocs(allQ);
+              // reuse mapping logic below by replacing snapshot variable
+              snapshot = allSnap; // eslint-disable-line no-param-reassign
+              processSnapshot(snapshot);
+            } catch (fallbackErr) {
+              console.error('Fallback getDocs failed:', fallbackErr);
+              setError(String(fallbackErr));
+              setLoading(false);
             }
-            
-            const productCategory = data.category || 'Uncategorized';
-            const productPrice = data.price || 0;
+          })();
+          return;
+        }
+
+        processSnapshot(snapshot);
+
+        function processSnapshot(snap) {
+          const mapped = snap.docs.map((doc) => {
+            const data = doc.data() || {};
+
+            // Defensive normalization for fields that vary between imports
+            const name =
+              (data.name && (data.name.EN || data.name.en || data.name.En)) ||
+              data.title ||
+              data.name ||
+              (data.titleMap && (data.titleMap.EN || data.titleMap.en)) ||
+              '';
+
+            const price = data.price ?? (data.pricing?.amount) ?? 0;
+            const thumbnail =
+              data.thumbnail ||
+              data.thumbnailUrl ||
+              (Array.isArray(data.images) && data.images[0]) ||
+              data.imageUrl ||
+              '';
+
+            // createdAt may be string or Timestamp
+            let createdAt = data.createdAt;
+            if (createdAt && typeof createdAt === 'string') {
+              createdAt = new Date(createdAt);
+            } else if (createdAt && createdAt.toDate) {
+              createdAt = createdAt.toDate();
+            } else {
+              createdAt = new Date(0);
+            }
 
             return {
               id: doc.id,
-              name: productName,
-              category: productCategory,
-              price: productPrice,
-              description: data.seo?.description || data.description || '',
-              stock: data.stock || 0,
-              thumbnail: data.thumbnail || '',
-              cost: data.cost || 0,
+              name,
+              price,
+              description: data.description || data.seo?.description || '',
+              category: data.category || '',
               sku: data.sku || '',
-              status: data.status || 'published'
+              stock: typeof data.stock === 'number' ? data.stock : (data.quantity ?? 0),
+              status: data.status || 'published',
+              thumbnail,
+              imageUrl: thumbnail, // normalize to imageUrl as well
+              createdAt,
+              raw: data
             };
           });
 
-          console.log('Processed products data:', productsData);
-          setProducts(productsData);
-          setLoading(false);
-          setError(null);
-        },
-        (error) => {
-          console.error('Error in products snapshot:', error);
-          setError('Failed to load products: ' + error.message);
+          // Optionally filter out drafts / unwanted statuses here; for now keep all published + others
+          const visible = mapped.filter(p => p && (p.status !== 'archived')); // adjust as needed
+
+          console.log('Processed products data:', visible, 'total:', visible.length);
+          setProducts(visible);
           setLoading(false);
         }
-      );
+      }, (err) => {
+        console.error('Products snapshot error:', err);
+        setError(err.message || String(err));
+        setLoading(false);
+      });
 
-      return unsubscribe;
-    } catch (error) {
-      console.error('Error setting up products listener:', error);
-      setError('Failed to load products: ' + error.message);
+      return () => unsub();
+    } catch (err) {
+      console.error('useProducts error:', err);
+      setError(err.message || String(err));
       setLoading(false);
     }
   }, [user]);
@@ -253,7 +292,9 @@ export const useProposals = (user) => {
           unitPrice: product.unitPrice || 0,
           discount: product.discount || 0,
           taxable: product.taxable !== undefined ? product.taxable : true,
-          lineTotal: product.lineTotal || 0
+          lineTotal: product.lineTotal || 0,
+          // FIX: Ensure imageUrl is preserved when saving proposal
+          imageUrl: product.imageUrl || product.thumbnail || ''
         })) || []
       };
 
@@ -267,26 +308,26 @@ export const useProposals = (user) => {
     }
   };
 
- const updateProposal = async (proposalId, updates) => {
-  try {
-    if (!user || !user.uid) {
-      throw new Error('User must be authenticated to update a proposal');
+  const updateProposal = async (proposalId, updates) => {
+    try {
+      if (!user || !user.uid) {
+        throw new Error('User must be authenticated to update a proposal');
+      }
+
+      // Remove undefined fields (especially expires)
+      const cleanedUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, v]) => v !== undefined)
+      );
+
+      await updateDoc(doc(proposalsCollection, proposalId), {
+        ...cleanedUpdates,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating proposal:', error);
+      throw error;
     }
-
-    // Remove undefined fields (especially expires)
-    const cleanedUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([_, v]) => v !== undefined)
-    );
-
-    await updateDoc(doc(proposalsCollection, proposalId), {
-      ...cleanedUpdates,
-      updatedAt: serverTimestamp()
-    });
-  } catch (error) {
-    console.error('Error updating proposal:', error);
-    throw error;
-  }
-};
+  };
 
   const deleteProposal = async (proposalId) => {
     try {
@@ -327,4 +368,53 @@ export const useProposals = (user) => {
     deleteProposal,
     bulkDeleteProposals
   };
+};
+
+// ---------- useTemplates ----------
+export const useTemplates = (user) => {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!user) {
+      setTemplates([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const q = query(
+        templatesCollection,
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          const templatesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+            updatedAt: doc.data().updatedAt?.toDate()
+          }));
+          setTemplates(templatesData);
+          setLoading(false);
+          setError(null);
+        },
+        (error) => {
+          console.error('Error fetching templates:', error);
+          setError('Failed to load templates');
+          setLoading(false);
+        }
+      );
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up templates listener:', error);
+      setLoading(false);
+    }
+  }, [user]);
+
+  return { templates, loading, error };
 };

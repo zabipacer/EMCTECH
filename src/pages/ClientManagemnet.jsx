@@ -9,7 +9,6 @@ import {
   FaPhone,
   FaMapMarkerAlt,
   FaBuilding,
-  FaCalendarAlt,
   FaStar,
   FaFilter,
   FaEye,
@@ -20,70 +19,81 @@ import {
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  writeBatch,
+  getDocs,
+  limit as fsLimit
+} from "firebase/firestore";
+
+import { db } from "../firebase/firebase"; // path to firebase.js
+
 /**
- * ClientManagement (improved)
- * - Persistence via localStorage
- * - Pagination + bulk actions (delete, export CSV)
- * - Add / Edit modal + View detail modal
- * - Toast + Confirm dialog
- * - Better status badge handling (Tailwind-safe)
+ * ClientManagement (Firestore-connected)
+ * - Real-time Firestore listener on "clients" collection
+ * - Add / Edit / Delete / Bulk delete
+ * - CSV export & pagination are client-side
  *
- * Replace localStorage hooks with API calls when ready.
+ * Make sure to replace firebase config in src/firebase.js
  */
 
-const STORAGE_KEY = "__mvp_clients_v1";
-
-/* ----------------------------- Helpers ----------------------------- */
-
-const sampleClients = [
+const SAMPLE_CLIENTS = [
   {
-    id: 1,
     name: "Client A",
     email: "clientA@example.com",
     phone: "+1 (555) 123-4567",
     company: "ABC Corporation",
     address: "123 Main St, New York, NY 10001",
     status: "premium",
-    joinDate: "2023-01-15",
+    createdAt: new Date().toISOString().split("T")[0],
+    joinDate: new Date().toISOString().split("T")[0],
     projects: 12,
     revenue: 125000,
     notes: "Long-term client with consistent orders."
   },
   {
-    id: 2,
     name: "Client B",
     email: "clientB@example.com",
     phone: "+1 (555) 987-6543",
     company: "XYZ Industries",
     address: "456 Oak Ave, Los Angeles, CA 90210",
     status: "active",
-    joinDate: "2023-03-22",
+    createdAt: new Date().toISOString().split("T")[0],
+    joinDate: new Date().toISOString().split("T")[0],
     projects: 5,
     revenue: 45000,
     notes: "New client with high potential for growth."
   },
   {
-    id: 3,
     name: "Client C",
     email: "clientC@example.com",
     phone: "+1 (555) 246-8102",
     company: "Smith & Sons",
     address: "789 Pine Rd, Chicago, IL 60601",
     status: "prospect",
-    joinDate: "2023-05-10",
+    createdAt: new Date().toISOString().split("T")[0],
+    joinDate: new Date().toISOString().split("T")[0],
     projects: 0,
     revenue: 0,
     notes: "Currently in negotiation phase."
   },
   {
-    id: 4,
     name: "Client D",
     email: "clientD@example.com",
     phone: "+1 (555) 369-1215",
     company: "Johnson Enterprises",
     address: "321 Elm St, Houston, TX 77002",
     status: "inactive",
-    joinDate: "2022-11-05",
+    createdAt: new Date().toISOString().split("T")[0],
+    joinDate: new Date().toISOString().split("T")[0],
     projects: 3,
     revenue: 28000,
     notes: "No recent activity. Follow up required."
@@ -96,32 +106,6 @@ const STATUS_OPTIONS = [
   { value: "premium", label: "Premium", colorClass: "bg-purple-100 text-purple-800" },
   { value: "prospect", label: "Prospect", colorClass: "bg-blue-100 text-blue-800" }
 ];
-
-const loadClients = () => {
-  try {
-    const r = localStorage.getItem(STORAGE_KEY);
-    if (!r) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleClients));
-      return sampleClients;
-    }
-    return JSON.parse(r);
-  } catch (e) {
-    console.error("loadClients:", e);
-    return sampleClients;
-  }
-};
-
-const saveClients = (list) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-};
-
-const formatCurrency = (amount) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-
-const formatDate = (dateString) =>
-  new Date(dateString).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-
-/* -------------------------- Reusable UI ---------------------------- */
 
 function Toast({ message, type = "info", onClose }) {
   React.useEffect(() => {
@@ -153,10 +137,8 @@ function ConfirmDialog({ open, title, message, onCancel, onConfirm }) {
   );
 }
 
-/* ----------------------- Main Component ---------------------------- */
-
 export default function ClientManagement() {
-  const [clients, setClients] = useState([]);
+  const [clients, setClients] = useState([]); // firestore data: array of { id, ...fields }
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [viewingClient, setViewingClient] = useState(null);
@@ -187,56 +169,70 @@ export default function ClientManagement() {
   const [confirm, setConfirm] = useState({ open: false });
   const modalRef = useRef(null);
 
-  // Load clients from storage (simulate API)
+  // Firestore collection ref
+  const clientsColRef = collection(db, "clients");
+
+  /* ------------------ Firestore: real-time load ------------------ */
   useEffect(() => {
     setIsLoading(true);
-    setTimeout(() => {
-      const loaded = loadClients();
-      setClients(loaded);
-      setIsLoading(false);
-    }, 350);
+    // order by createdAt if exists, fallback to name
+    const q = query(clientsColRef, orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const arr = [];
+        snapshot.forEach((d) => {
+          arr.push({ id: d.id, ...d.data() });
+        });
+
+        if (arr.length === 0) {
+          // populate sample data if firestore is empty (optional)
+          (async function seed() {
+            try {
+              for (const s of SAMPLE_CLIENTS) {
+                await addDoc(clientsColRef, {
+                  ...s,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp()
+                });
+              }
+              // after seed, the onSnapshot will pick them up
+            } catch (err) {
+              console.error("Error seeding sample clients:", err);
+            }
+          })();
+        }
+
+        setClients(arr);
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error("clients onSnapshot error:", err);
+        setIsLoading(false);
+        setToast({ message: "Failed to load clients", type: "error" });
+      }
+    );
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist whenever clients change
-  useEffect(() => {
-    saveClients(clients);
-  }, [clients]);
+  /* ------------------ Derived: filter, sort, pagination ------------------ */
 
-  // Reset form when modal closed
-  useEffect(() => {
-    if (!isModalOpen) {
-      setEditingClient(null);
-      setFormData({ name: "", email: "", phone: "", company: "", address: "", status: "active" });
-      setErrors({});
-    } else if (editingClient) {
-      setFormData({
-        name: editingClient.name || "",
-        email: editingClient.email || "",
-        phone: editingClient.phone || "",
-        company: editingClient.company || "",
-        address: editingClient.address || "",
-        status: editingClient.status || "active"
-      });
-    }
-  }, [isModalOpen, editingClient]);
-
-  // Filter & sort
   const filtered = clients
     .filter((c) => {
       const q = searchTerm.trim().toLowerCase();
-      const matchesQ = !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
-      const matchesStatus = statusFilter === "all" || c.status === statusFilter;
+      const matchesQ = !q || (c.name || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q) || ((c.company || "").toLowerCase().includes(q));
+      const matchesStatus = statusFilter === "all" || (c.status || "inactive") === statusFilter;
       return matchesQ && matchesStatus;
     })
     .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "joinDate") return new Date(b.joinDate) - new Date(a.joinDate);
-      if (sortBy === "revenue") return b.revenue - a.revenue;
-      if (sortBy === "projects") return b.projects - a.projects;
+      if (sortBy === "name") return (a.name || "").localeCompare(b.name || "");
+      if (sortBy === "joinDate") return new Date(b.joinDate || b.createdAt || 0) - new Date(a.joinDate || a.createdAt || 0);
+      if (sortBy === "revenue") return (b.revenue || 0) - (a.revenue || 0);
+      if (sortBy === "projects") return (b.projects || 0) - (a.projects || 0);
       return 0;
     });
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   useEffect(() => {
     if (page > totalPages) setPage(1);
@@ -247,7 +243,7 @@ export default function ClientManagement() {
 
   // Stats
   const totalClients = clients.length;
-  const activeClients = clients.filter((c) => c.status === "active" || c.status === "premium").length;
+  const activeClients = clients.filter((c) => (c.status === "active" || c.status === "premium")).length;
   const premiumClients = clients.filter((c) => c.status === "premium").length;
   const totalRevenue = clients.reduce((s, c) => s + (c.revenue || 0), 0);
 
@@ -255,10 +251,10 @@ export default function ClientManagement() {
 
   const validateForm = () => {
     const errs = {};
-    if (!formData.name.trim()) errs.name = "Client name is required";
-    if (!formData.email.trim()) errs.email = "Email is required";
+    if (!formData.name || !formData.name.trim()) errs.name = "Client name is required";
+    if (!formData.email || !formData.email.trim()) errs.email = "Email is required";
     else if (!/\S+@\S+\.\S+/.test(formData.email)) errs.email = "Email is invalid";
-    if (!formData.phone.trim()) errs.phone = "Phone number is required";
+    if (!formData.phone || !formData.phone.trim()) errs.phone = "Phone number is required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -277,37 +273,55 @@ export default function ClientManagement() {
 
   const openEditModal = (client) => {
     setEditingClient(client);
+    setFormData({
+      name: client.name || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      company: client.company || "",
+      address: client.address || "",
+      status: client.status || "active"
+    });
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e) => {
+  /* ---------------------- Firestore Actions: Add / Update ---------------------- */
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    if (editingClient) {
-      setClients((prev) => prev.map((c) => (c.id === editingClient.id ? { ...c, ...formData } : c)));
+
+    try {
+      if (editingClient && editingClient.id) {
+        const docRef = doc(db, "clients", editingClient.id);
+        await updateDoc(docRef, {
+          ...formData,
+          updatedAt: serverTimestamp()
+        });
+        setToast({ message: "Client updated", type: "success" });
+      } else {
+        await addDoc(clientsColRef, {
+          ...formData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          joinDate: new Date().toISOString().split("T")[0],
+          projects: 0,
+          revenue: 0,
+          notes: ""
+          // optionally add userId: auth.currentUser?.uid
+        });
+        setToast({ message: "Client added", type: "success" });
+      }
       setIsModalOpen(false);
-      setToast({ message: "Client updated", type: "success" });
-    } else {
-      const newId = clients.length ? Math.max(...clients.map((c) => c.id)) + 1 : 1;
-      const newClient = {
-        id: newId,
-        ...formData,
-        joinDate: new Date().toISOString().split("T")[0],
-        projects: 0,
-        revenue: 0,
-        notes: ""
-      };
-      setClients((prev) => [...prev, newClient]);
-      setIsModalOpen(false);
-      setToast({ message: "Client added", type: "success" });
+    } catch (err) {
+      console.error("handleSubmit error:", err);
+      setToast({ message: "Failed to save client", type: "error" });
     }
   };
 
-  /* ---------------------- Actions ---------------------- */
+  /* ---------------------- View / Delete ---------------------- */
 
   const handleViewClient = (client) => {
     setViewingClient(client);
-    // ensure modals closed
     setIsModalOpen(false);
   };
 
@@ -316,15 +330,23 @@ export default function ClientManagement() {
       open: true,
       title: "Delete client",
       message: "Are you sure you want to delete this client? This action cannot be undone.",
-      onConfirm: () => {
-        setClients((prev) => prev.filter((c) => c.id !== clientId));
-        setViewingClient((v) => (v && v.id === clientId ? null : v));
-        setConfirm({ open: false });
-        setToast({ message: "Client deleted", type: "success" });
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "clients", clientId));
+          setViewingClient((v) => (v && v.id === clientId ? null : v));
+          setConfirm({ open: false });
+          setToast({ message: "Client deleted", type: "success" });
+        } catch (err) {
+          console.error("delete client error:", err);
+          setToast({ message: "Failed to delete client", type: "error" });
+          setConfirm({ open: false });
+        }
       },
       onCancel: () => setConfirm({ open: false })
     });
   };
+
+  /* ---------------------- Selection & Bulk actions ---------------------- */
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) => {
@@ -358,27 +380,37 @@ export default function ClientManagement() {
       open: true,
       title: `Delete ${ids.length} clients`,
       message: "This action cannot be undone. Are you sure?",
-      onConfirm: () => {
-        setClients((prev) => prev.filter((c) => !ids.includes(c.id)));
-        setSelectedIds(new Set());
-        setConfirm({ open: false });
-        setToast({ message: `${ids.length} clients deleted`, type: "success" });
+      onConfirm: async () => {
+        try {
+          const batch = writeBatch(db);
+          ids.forEach((id) => batch.delete(doc(db, "clients", id)));
+          await batch.commit();
+          setSelectedIds(new Set());
+          setConfirm({ open: false });
+          setToast({ message: `${ids.length} clients deleted`, type: "success" });
+        } catch (err) {
+          console.error("bulk delete error:", err);
+          setToast({ message: "Bulk delete failed", type: "error" });
+          setConfirm({ open: false });
+        }
       },
       onCancel: () => setConfirm({ open: false })
     });
   };
 
+  /* ---------------------- Export CSV ---------------------- */
+
   const exportSelectedCSV = () => {
     const ids = Array.from(selectedIds);
     const rows = (ids.length ? clients.filter((c) => ids.includes(c.id)) : filtered).map((c) => ({
       id: c.id,
-      name: c.name,
-      email: c.email,
-      phone: c.phone,
-      company: c.company,
-      status: c.status,
-      projects: c.projects,
-      revenue: c.revenue
+      name: c.name || "",
+      email: c.email || "",
+      phone: c.phone || "",
+      company: c.company || "",
+      status: c.status || "",
+      projects: c.projects || 0,
+      revenue: c.revenue || 0
     }));
     if (rows.length === 0) return setToast({ message: "No clients to export", type: "error" });
     const csv = toCSV(rows);
@@ -449,7 +481,7 @@ export default function ClientManagement() {
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-indigo-500">
               <p className="text-sm text-gray-600">Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+              <p className="text-2xl font-bold text-gray-900">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totalRevenue)}</p>
             </div>
           </div>
         </motion.div>
@@ -544,6 +576,7 @@ export default function ClientManagement() {
                   <AnimatePresence>
                     {pageData.map((client) => {
                       const statusInfo = STATUS_OPTIONS.find((s) => s.value === client.status) || STATUS_OPTIONS[0];
+                      const joinDate = client.joinDate || (client.createdAt && client.createdAt.toDate ? client.createdAt.toDate().toISOString().split("T")[0] : client.createdAt || "");
                       return (
                         <motion.tr key={client.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} whileHover={{ backgroundColor: "rgba(0,0,0,0.02)" }}>
                           <td className="p-4">
@@ -557,11 +590,11 @@ export default function ClientManagement() {
                           <td className="p-4">
                             <div className="flex items-center">
                               <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-blue-800 font-medium">{client.name.split(" ").map((n) => n[0]).join("")}</span>
+                                <span className="text-blue-800 font-medium">{(client.name || "").split(" ").map((n) => n[0]).join("")}</span>
                               </div>
                               <div className="ml-4">
                                 <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                                <div className="text-sm text-gray-500">{formatDate(client.joinDate)}</div>
+                                <div className="text-sm text-gray-500">{joinDate ? new Date(joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : ""}</div>
                               </div>
                             </div>
                           </td>
@@ -576,8 +609,8 @@ export default function ClientManagement() {
                               {statusInfo.label}
                             </span>
                           </td>
-                          <td className="p-4 text-sm text-gray-700 font-medium">{client.projects}</td>
-                          <td className="p-4 text-sm text-gray-700 font-medium">{formatCurrency(client.revenue)}</td>
+                          <td className="p-4 text-sm text-gray-700 font-medium">{client.projects || 0}</td>
+                          <td className="p-4 text-sm text-gray-700 font-medium">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(client.revenue || 0)}</td>
                           <td className="p-4 text-sm">
                             <div className="flex space-x-2">
                               <button onClick={() => handleViewClient(client)} className="text-blue-600 hover:text-blue-800 flex items-center px-3 py-1 rounded-md hover:bg-blue-50">
@@ -698,7 +731,7 @@ export default function ClientManagement() {
                       {viewingClient.status === "premium" && <FaStar className="mr-1" />}
                       {STATUS_OPTIONS.find((s) => s.value === viewingClient.status)?.label}
                     </span>
-                    <p className="mt-2 text-blue-100">Member since {formatDate(viewingClient.joinDate)}</p>
+                    <p className="mt-2 text-blue-100">Member since {viewingClient.joinDate || (viewingClient.createdAt && viewingClient.createdAt.toDate ? viewingClient.createdAt.toDate().toLocaleDateString() : "")}</p>
                   </div>
                 </div>
               </div>
@@ -718,9 +751,9 @@ export default function ClientManagement() {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Client Statistics</h3>
                     <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                      <div className="flex justify-between"><span className="text-gray-600">Total Projects</span><span className="font-semibold">{viewingClient.projects}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Total Revenue</span><span className="font-semibold">{formatCurrency(viewingClient.revenue)}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Client Since</span><span className="font-semibold">{formatDate(viewingClient.joinDate)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Total Projects</span><span className="font-semibold">{viewingClient.projects || 0}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Total Revenue</span><span className="font-semibold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(viewingClient.revenue || 0)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Client Since</span><span className="font-semibold">{viewingClient.joinDate || (viewingClient.createdAt && viewingClient.createdAt.toDate ? viewingClient.createdAt.toDate().toLocaleDateString() : "")}</span></div>
                     </div>
                   </div>
                 </div>
