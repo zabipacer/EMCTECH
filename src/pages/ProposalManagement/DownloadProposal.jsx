@@ -29,20 +29,13 @@ const PDF_CONFIG = {
 
 class PDFGenerationError extends Error { constructor(message, originalError = null) { super(message); this.name = 'PDFGenerationError'; this.originalError = originalError; } }
 
-/* ---------- Added: Offscreen canvas measurer with small cache ----------
-   - TextMeasurer.measureTextLines(ctx, text, fontFamily, fontSizePt, maxWidthMm)
-   - TextMeasurer.fitFontSizeToBox(text, fontFamily, preferredSizePt, minSizePt, boxWidthMm, boxHeightMm, lineHeightMultiplier)
-   - Uses same line height formula as PDF generator to remain consistent.
-   - Small cache keyed by text+font+size+maxWidth to avoid repeated measurement.
-   - The EMCProposalPDF creates one instance and uses its results to compute lines/fontSize
-*/
+/* ---------- Enhanced TextMeasurer with word wrapping protection ---------- */
 class TextMeasurer {
   constructor(lineHeightForFontSizeFn) {
-    this.lineHeightForFontSize = lineHeightForFontSizeFn; // expects mm per line
+    this.lineHeightForFontSize = lineHeightForFontSizeFn;
     this.cache = new Map();
-    // conversions: 1 mm = 3.779527559 px (approx at 96dpi). used for canvas measurement.
-    this.MM_TO_PX = 3.779527559055; // multiply mm -> px
-    this.PT_TO_PX = 96/72; // multiply pt -> px
+    this.MM_TO_PX = 3.779527559055;
+    this.PT_TO_PX = 96/72;
     this.canvas = (typeof document !== 'undefined') ? document.createElement('canvas') : null;
     this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
     if (this.ctx) this.ctx.textBaseline = 'top';
@@ -53,18 +46,24 @@ class TextMeasurer {
   }
 
   measureTextLines(text, fontFamily, fontSizePt, maxWidthMm) {
-    // return array of wrapped lines (using canvas measurements); convert widths via MM_TO_PX
     if (!this.ctx) {
-      // fallback: naive split by words without precise measurement
-      const approxCharsPerLine = Math.max(10, Math.floor(maxWidthMm / (fontSizePt * 0.35)));
+      // Fallback with word-based wrapping (no character breaks)
       const words = String(text || '').split(/\s+/);
       const lines = [];
-      let cur = '';
-      for (let w of words) {
-        if ((cur + ' ' + w).trim().length <= approxCharsPerLine) cur = (cur + ' ' + w).trim();
-        else { if (cur) lines.push(cur); cur = w; }
+      let currentLine = '';
+      
+      for (let word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const approxWidth = testLine.length * (fontSizePt * 0.35);
+        
+        if (approxWidth <= maxWidthMm || currentLine === '') {
+          currentLine = testLine;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
       }
-      if (cur) lines.push(cur);
+      if (currentLine) lines.push(currentLine);
       return lines;
     }
 
@@ -77,46 +76,43 @@ class TextMeasurer {
 
     const words = String(text || '').split(/\s+/);
     const lines = [];
-    let cur = '';
+    let currentLine = '';
 
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      const test = cur ? (cur + ' ' + w) : w;
-      const measured = this.ctx.measureText(test).width;
-      if (measured <= maxWidthPx || cur === '') {
-        cur = test;
+    for (let word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const measuredWidth = this.ctx.measureText(testLine).width;
+      
+      if (measuredWidth <= maxWidthPx || currentLine === '') {
+        currentLine = testLine;
       } else {
-        lines.push(cur);
-        cur = w;
+        lines.push(currentLine);
+        currentLine = word;
       }
     }
-    if (cur) lines.push(cur);
+    if (currentLine) lines.push(currentLine);
 
-    // as a last resort, if a single word exceeds width, break it char-wise
+    // Prevent single character wrapping - merge orphaned characters
+    const cleanedLines = [];
     for (let i = 0; i < lines.length; i++) {
-      const measured = this.ctx.measureText(lines[i]).width;
-      if (measured > maxWidthPx) {
-        const chars = lines[i].split('');
-        let buff = '';
-        const rebuilt = [];
-        for (let ch of chars) {
-          const test = buff + ch;
-          if (this.ctx.measureText(test).width <= maxWidthPx) buff = test;
-          else { if (buff) rebuilt.push(buff); buff = ch; }
+      if (i < lines.length - 1 && lines[i].length === 1 && lines[i] !== ' ') {
+        // Single character line - try to merge with next line
+        const merged = lines[i] + ' ' + lines[i + 1];
+        if (this.ctx.measureText(merged).width <= maxWidthPx) {
+          cleanedLines.push(merged);
+          i++; // Skip next line since we merged it
+        } else {
+          cleanedLines.push(lines[i]);
         }
-        if (buff) rebuilt.push(buff);
-        lines.splice(i, 1, ...rebuilt);
-        i += rebuilt.length - 1;
+      } else {
+        cleanedLines.push(lines[i]);
       }
     }
 
-    this.cache.set(key, lines);
-    return lines;
+    this.cache.set(key, cleanedLines);
+    return cleanedLines;
   }
 
   fitFontSizeToBox(text, fontFamily, preferredSizePt, minSizePt, boxWidthMm, boxHeightMm, lineHeightMultiplier = 1) {
-    // try decreasing font sizes from preferred to min (step 0.5) until text fits box
-    // returns { fontSize: pt, lines: [..] }
     const step = 0.5;
     for (let fs = preferredSizePt; fs >= minSizePt; fs = Math.round((fs - step) * 100) / 100) {
       const lines = this.measureTextLines(text, fontFamily, fs, boxWidthMm);
@@ -126,13 +122,13 @@ class TextMeasurer {
         return { fontSize: fs, lines, totalHeight, lineHeightMm };
       }
     }
-    // if nothing fits, return min size measurement (may overflow)
+    // Final fallback with min size
     const lines = this.measureTextLines(text, fontFamily, minSizePt, boxWidthMm);
     const lineHeightMm = this.lineHeightForFontSize(minSizePt) * lineHeightMultiplier;
     return { fontSize: minSizePt, lines, totalHeight: lines.length * lineHeightMm, lineHeightMm };
   }
 }
-/* ---------- end added measurer ---------- */
+/* ---------- end measurer ---------- */
 
 class ImageLoader {
   constructor(config = PDF_CONFIG.images) { this.config = config; this.cache = new Map(); }
@@ -225,7 +221,6 @@ class EMCProposalPDF {
   constructor(){ 
     this.imageLoader = new ImageLoader(); 
     this.doc = null; this.layout = null; this.data = null; this.usableWidth = 0; this.colWidths = []; 
-    // will be set in initializePDF when doc exists:
     this.measurer = null;
     this.debug = false;
   }
@@ -240,9 +235,7 @@ class EMCProposalPDF {
     this.layout = new PDFLayoutManager(this.doc);
     this.doc.setProperties({ title: 'Commercial Offer - EMC Technology', author: 'EMC Technology' });
     this.doc.setLineJoin('miter'); this.doc.setLineCap('butt');
-    // initialize measurer with this line height formula
     this.measurer = new TextMeasurer(this.lineHeightForFontSize.bind(this));
-    // debug flag exposed via options.debug
     this.debug = !!(options.debug);
   }
 
@@ -281,7 +274,7 @@ class EMCProposalPDF {
     finally { this.imageLoader.clearCache(); }
   }
 
-  /* small helper to render debug outlines and overlays if debug true */
+  /* Debug overlay for measured text boxes */
   _debugBox(x,y,w,h, fontSizePt, lines){
     if (!this.debug) return;
     try {
@@ -300,7 +293,7 @@ class EMCProposalPDF {
   renderHeader(){ const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; const y = layout.getY(); const pageW = layout.pageWidth; const logoW = Math.min(40, Math.max(22, pageW * 0.07)); const logoH = Math.min(30, Math.max(14, logoW * 0.65));
     doc.setFont('helvetica','bold'); doc.setFontSize(12);
 
-    // measure company name + info using measurer (keeps layout consistent but prevents overflow)
+    // Use text measurement for header to prevent overflow
     const nameFit = this.measurer.fitFontSizeToBox(this.data.company.name, 'helvetica', 14, 10, pageW - (margin * 4) - logoW, 40);
     const nameH = nameFit.lines.length * this.lineHeightForFontSize(nameFit.fontSize);
 
@@ -322,7 +315,6 @@ class EMCProposalPDF {
     doc.text('TECHNOLOGY', margin + logoW / 2, logoY + (logoH*0.75), { align: 'center' });
 
     doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    // place metadata at top-right for increased readability
     doc.text(this.data.metadata.number, layout.pageWidth - margin, y + 8, { align: 'right' });
     doc.text(this.data.metadata.date, layout.pageWidth - margin, y + 14, { align: 'right' });
 
@@ -330,7 +322,7 @@ class EMCProposalPDF {
     doc.setFont('helvetica', 'bold'); doc.setTextColor(...PDF_CONFIG.colors.accent);
     const centerTop = y + (headerH - centerTextH) / 2;
 
-    // draw measured name lines
+    // Draw measured name lines
     doc.setFontSize(nameFit.fontSize); doc.setFont('helvetica','bold');
     nameFit.lines.forEach((line,i)=>{ doc.text(line, centerX, centerTop + i * this.lineHeightForFontSize(nameFit.fontSize), { align: 'center' }); });
 
@@ -341,7 +333,7 @@ class EMCProposalPDF {
     doc.setFontSize(info2Fit.fontSize);
     info2Fit.lines.forEach((line,i)=>{ doc.text(line, centerX, infoStartY + i * this.lineHeightForFontSize(info2Fit.fontSize), { align: 'center' }); });
 
-    // debug boxes for header center area
+    // Debug boxes for header
     if (this.debug) {
       const centerBoxY = centerTop;
       const centerBoxH = centerTextH;
@@ -357,16 +349,14 @@ class EMCProposalPDF {
   }
 
   renderTitle(){ const doc = this.doc; const layout = this.layout; const centerX = layout.pageWidth / 2; 
-    // use measured fit for title so it doesn't overflow
+    // Use measured fit for title
     const titleBoxW = layout.pageWidth - PDF_CONFIG.page.margin*2;
     const titleFit = this.measurer.fitFontSizeToBox('COMMERCIAL OFFER', 'helvetica', PDF_CONFIG.fonts.titleSize, 10, titleBoxW, 20);
     doc.setFont('helvetica','bold'); doc.setFontSize(titleFit.fontSize); doc.setTextColor(0,0,0); doc.text('COMMERCIAL OFFER', centerX, layout.getY()); 
-    // debug box
     if (this.debug) this._debugBox(PDF_CONFIG.page.margin, layout.getY() - (this.lineHeightForFontSize(titleFit.fontSize)*0.8), titleBoxW, this.lineHeightForFontSize(titleFit.fontSize) + 2, titleFit.fontSize, titleFit.lines);
     layout.moveDown(this.lineHeightForFontSize(titleFit.fontSize) + 8);
   }
 
-  // simpler and robust intro rendering: wrap whole paragraph using measurer
   renderIntro(){ const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; 
     const before = 'We would like to inform you that ';
     const company = '"' + (this.data.company.name || '') + '"';
@@ -374,7 +364,7 @@ class EMCProposalPDF {
     const whole = before + company + after;
     const availableWidth = layout.pageWidth - margin * 2;
 
-    // use measurer to fit text
+    // Use measurer to fit intro text
     const introFit = this.measurer.fitFontSizeToBox(whole, 'helvetica', PDF_CONFIG.fonts.bodySize, 8, availableWidth, 80);
     const lineHeight = this.lineHeightForFontSize(introFit.fontSize);
 
@@ -382,9 +372,7 @@ class EMCProposalPDF {
       const ln = introFit.lines[i];
       const y = layout.getY() + (i * lineHeight);
       if (ln.includes(this.data.company.name)){
-        // color company fragment by finding occurrences in the constructed line
         const parts = ln.split(this.data.company.name);
-        // left part
         doc.setFont('helvetica','normal'); doc.setFontSize(introFit.fontSize); doc.text(parts[0], margin, y);
         const leftW = doc.getTextWidth(parts[0]);
         doc.setFont('helvetica','bold'); doc.setTextColor(...PDF_CONFIG.colors.accent);
@@ -398,7 +386,6 @@ class EMCProposalPDF {
       }
     }
 
-    // debug
     if (this.debug) this._debugBox(margin, layout.getY(), availableWidth, introFit.lines.length * lineHeight, introFit.fontSize, introFit.lines);
 
     layout.moveDown(introFit.lines.length * lineHeight + 8);
@@ -408,7 +395,7 @@ class EMCProposalPDF {
 
   renderTableHeader(){ const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; const headers = ['No','Requested Material description','Technical description Will be supplied','Will be supplied PHOTO','Unit','Quantity','Unit price(USD)','Total amount with (USD)'];
     const headerPadding = 4; const headerFits = []; let maxHeaderInnerHeight = 0;
-    // measure each header cell with measurer
+    // Measure each header cell
     for (let i=0;i<headers.length;i++){ 
       const w = this.colWidths[i] - 4;
       const fit = this.measurer.fitFontSizeToBox(headers[i], 'helvetica', PDF_CONFIG.fonts.tableHeaderSize, 6, w, 80);
@@ -429,7 +416,6 @@ class EMCProposalPDF {
       const startLineY = startY + (headerH/2) - (innerH/2) + (this.lineHeightForFontSize(fit.fontSize)/2);
       doc.setFontSize(fit.fontSize);
       fit.lines.forEach((ln,idx)=>{ doc.text(ln, centerX, startLineY + idx * this.lineHeightForFontSize(fit.fontSize), { align: 'center' }); });
-      // debug overlay for this header cell
       if (this.debug) this._debugBox(x, startY, w, headerH, fit.fontSize, fit.lines);
       x += w; 
     }
@@ -438,7 +424,6 @@ class EMCProposalPDF {
   }
 
   renderCategoryRow(text){ const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; const padding = 4; 
-    // measure with measurer
     const fit = this.measurer.fitFontSizeToBox(text, 'helvetica', 9, 7, this.usableWidth - padding*2, 60);
     const textH = fit.lines.length * this.lineHeightForFontSize(fit.fontSize); 
     const h = Math.max(PDF_CONFIG.table.defaultMinRowHeight, textH + padding*2);
@@ -453,11 +438,6 @@ class EMCProposalPDF {
   }
 
   renderProductRowWithFlow(product){ 
-    /* NOTE: changed from multi-fragment splitting to whole-row check:
-       - measure name & description with measurer and compute single row height
-       - If row doesn't fit remaining page, move whole row to next page and repeat header
-       This satisfies "do a simple per-row height check" and avoids overlapping.
-    */
     const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; const padding = PDF_CONFIG.table.cellPadding; 
     const descColIndex = 2; const descW = this.colWidths[descColIndex] - (padding*2); 
     const descPreferred = Math.max(PDF_CONFIG.fonts.tableBodySize, PDF_CONFIG.fonts.tableBodySize);
@@ -472,35 +452,34 @@ class EMCProposalPDF {
     const reservedForNameImage = Math.max(nameHeight, imageHeight);
     let rowHeight = Math.max(minRowH, descHeight + padding*2 + reservedForNameImage);
 
-    // page overflow check per-row: move whole row to next page if it doesn't fit
+    // Page overflow check - move entire row to next page if needed
     if (layout.getY() + rowHeight > layout.pageHeight - PDF_CONFIG.page.margin - 10){
-      layout.addPage(); this.renderTableHeader();
-      // recompute available space if needed (rowHeight unchanged)
+      layout.addPage(); 
+      this.renderTableHeader(); // Repeat header on new page
     }
 
     const rowY = layout.getY(); doc.setDrawColor(0,0,0); doc.setLineWidth(0.2);
     let x = margin; for (let i=0;i<this.colWidths.length;i++){ doc.rect(x, rowY, this.colWidths[i], rowHeight); x += this.colWidths[i]; }
 
     x = margin; doc.setFont('helvetica','bold'); doc.setFontSize(9);
-    // No fragmentation: single row contains number, name, description, image, etc.
     const numX = x + this.colWidths[0]/2; const numY = rowY + rowHeight/2 + 2; doc.text(product.number.toString(), numX, numY, { align: 'center' });
     x += this.colWidths[0];
 
-    // name cell
+    // Name cell with measured text
     doc.setFont('helvetica','bold'); doc.setFontSize(nameFit.fontSize);
     const baseNameY = rowY + padding + 3;
     nameFit.lines.forEach((ln,li)=>{ const targetY = baseNameY + li * this.lineHeightForFontSize(nameFit.fontSize); doc.text(ln, x + padding, targetY); });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[1], rowHeight, nameFit.fontSize, nameFit.lines);
     x += this.colWidths[1];
 
-    // description cell
+    // Description cell with measured text
     doc.setFont('helvetica','normal'); doc.setFontSize(descFit.fontSize);
     const descStartY = rowY + padding;
     descFit.lines.forEach((ln,i)=>{ doc.text(ln, x + padding, descStartY + i * this.lineHeightForFontSize(descFit.fontSize)); });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[2], rowHeight, descFit.fontSize, descFit.lines);
     x += this.colWidths[2];
 
-    // image cell (unchanged from previous logic, but we scale proportionally and keep same placement)
+    // Image cell with proportional scaling
     if (product.imageMeta && product.imageMeta.dataUrl){
       try {
         const imgX = x + padding; const imgY = rowY + padding; const cellW = this.colWidths[3]; const cellH = rowHeight - padding*2; const maxImgW = Math.max(6, cellW - padding*2); const maxImgH = Math.min(imageMaxH, cellH);
@@ -509,11 +488,11 @@ class EMCProposalPDF {
         const mime = (product.imageMeta.mime && product.imageMeta.mime.includes('png')) ? 'PNG' : 'JPEG';
         doc.addImage(product.imageMeta.dataUrl, mime, imgX + ((maxImgW - targetW)/2), imgY + ((maxImgH - targetH)/2), targetW, targetH);
       }
-      catch(e){ console.warn('addImage failed', e); doc.setFillColor(211,211,211); doc.rect(x + padding, rowY + padding, Math.max(6, this.colWidths[3] - padding*2), Math.min(imageMaxH, rowHeight - padding*2), 'F'); doc.setFontSize(7); doc.setTextColor(100,100,100); const fallbackLines = doc.splitTextToSize(product.name, Math.max(6, this.colWidths[3] - padding*2) - 2); fallbackLines.forEach((line, idx)=>{ doc.text(line, x + padding + (Math.max(6, this.colWidths[3] - padding*2)/2), rowY + padding + ((idx) * this.lineHeightForFontSize(7)), { align: 'center' }); }); doc.setTextColor(0,0,0); }
+      catch(e){ console.warn('addImage failed', e); doc.setFillColor(211,211,211); doc.rect(x + padding, rowY + padding, Math.max(6, this.colWidths[3] - padding*2), Math.min(imageMaxH, rowHeight - padding*2), 'F'); doc.setFontSize(7); doc.setTextColor(100,100,100); const fallbackLines = this.measurer.measureTextLines(product.name, 'helvetica', 7, Math.max(6, this.colWidths[3] - padding*2) - 2); fallbackLines.forEach((line, idx)=>{ doc.text(line, x + padding + (Math.max(6, this.colWidths[3] - padding*2)/2), rowY + padding + ((idx) * this.lineHeightForFontSize(7)), { align: 'center' }); }); doc.setTextColor(0,0,0); }
     } else {
       doc.setFillColor(211,211,211); doc.rect(x + padding, rowY + padding, Math.max(6, this.colWidths[3] - padding*2), Math.min(imageMaxH, rowHeight - padding*2), 'F');
       doc.setFontSize(7); doc.setTextColor(100,100,100);
-      const placeholderLines = doc.splitTextToSize(product.name, Math.max(6, this.colWidths[3] - padding*2) - 2);
+      const placeholderLines = this.measurer.measureTextLines(product.name, 'helvetica', 7, Math.max(6, this.colWidths[3] - padding*2) - 2);
       placeholderLines.forEach((line, idx)=>{ doc.text(line, x + padding + (Math.max(6, this.colWidths[3] - padding*2)/2), rowY + padding + (idx * this.lineHeightForFontSize(7)), { align: 'center' }); });
       doc.setTextColor(0,0,0);
     }
@@ -521,22 +500,22 @@ class EMCProposalPDF {
 
     x += this.colWidths[3];
 
-    // unit
+    // Unit
     doc.setFont('helvetica','normal'); doc.setFontSize(9); const unitText = String(product.unit); const unitX = x + this.colWidths[4]/2; const unitY = rowY + rowHeight/2 + 2; doc.text(unitText, unitX, unitY, { align: 'center' });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[4], rowHeight, 9, [{ }]);
     x += this.colWidths[4];
 
-    // quantity
+    // Quantity
     doc.setFontSize(9); const qtyText = String(product.quantity); const qtyX = x + this.colWidths[5]/2; const qtyY = rowY + rowHeight/2 + 2; doc.text(qtyText, qtyX, qtyY, { align: 'center' });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[5], rowHeight, 9, [{ }]);
     x += this.colWidths[5];
 
-    // unit price
+    // Unit price
     doc.setFontSize(9); const priceText = Number(product.unitPrice).toFixed(2); const priceX = x + this.colWidths[6] - 3; const priceY = rowY + rowHeight/2 + 2; doc.text(priceText, priceX, priceY, { align: 'right' });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[6], rowHeight, 9, [{ }]);
     x += this.colWidths[6];
 
-    // total
+    // Total
     const total = (product.unitPrice * product.quantity) || 0; doc.setFontSize(9); const totalText = Number(total).toFixed(2); const totalX = x + this.colWidths[7] - 3; const totalY = rowY + rowHeight/2 + 2; doc.text(totalText, totalX, totalY, { align: 'right' });
     if (this.debug) this._debugBox(x, rowY, this.colWidths[7], rowHeight, 9, [{ }]);
 
@@ -549,7 +528,7 @@ class EMCProposalPDF {
   renderNotes(){ const doc = this.doc; const layout = this.layout; const margin = PDF_CONFIG.page.margin; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('NOTES:', margin, layout.getY()); layout.moveDown(6); doc.setFont('helvetica','normal'); doc.setFontSize(9);
     const notes = [{ label: '1. Terms of payment:', text: this.data.terms.payment },{ label: '2. Estimated delivery time:', text: this.data.terms.deliveryTime },{ label: '3. Terms of delivery:', text: this.data.terms.delivery }];
     const bulletIndent = 5; const lineHeight = this.lineHeightForFontSize(9);
-    notes.forEach(note=>{ const fullText = `${note.label} ${note.text}`; // measure via measurer
+    notes.forEach(note=>{ const fullText = `${note.label} ${note.text}`;
       const fit = this.measurer.fitFontSizeToBox(fullText, 'helvetica', 9, 7, this.layout.pageWidth - margin*2 - bulletIndent, 80);
       const blockH = fit.lines.length * this.lineHeightForFontSize(fit.fontSize) + 2; 
       if (layout.getY() + blockH > layout.pageHeight - PDF_CONFIG.page.margin) { layout.addPage(); }
