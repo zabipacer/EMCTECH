@@ -20,13 +20,48 @@ const CreateProposalModal = ({
   clients = [],
   availableProducts = []
 }) => {
+  // Company configurations
+  const companyConfigs = {
+    emctech: {
+      name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
+      shortName: "EMC Technology (emctech.uz)",
+      address: "Tashkent city, Yunusabad district, Bogishamol 21B",
+      phone: "+998 90 122 55 18",
+      email: "info@emctech.uz",
+      bankAccount: "2020 8000 0052 8367 7001",
+      mfo: "00419",
+      taxId: "307 738 207",
+      oked: "43299",
+      signatory: {
+        title: "General manager",
+        name: "S.S. Abdushukurov"
+      }
+    },
+    innovamechanics: {
+      name: "Innovamechanics",
+      shortName: "Innovamechanics.com", 
+      address: "Tashkent, Uzbekistan",
+      phone: "+998 90 123 45 67",
+      email: "info@innovamechanics.com",
+      bankAccount: "To be provided",
+      mfo: "To be provided",
+      taxId: "To be provided",
+      oked: "To be provided",
+      signatory: {
+        title: "Director",
+        name: "Director Name"
+      }
+    }
+  };
+
   // State management
   const [proposal, setProposal] = useState({
     proposalNumber: `PROP-${Date.now()}`,
     clientId: "",
     clientName: "",
     clientEmail: "",
-    company: "Your Company Name",
+    company: "emctech", // Default company
+    companyName: companyConfigs.emctech.shortName,
     proposalTitle: "",
     proposalDate: new Date().toISOString().split('T')[0],
     validUntil: "",
@@ -35,27 +70,15 @@ const CreateProposalModal = ({
     discount: 0,
     taxRate: 10,
     status: "draft",
-    templateType: "simple-commercial", // Updated: Four template types
+    templateType: "simple-commercial",
     documentNumber: "",
-    companyDetails: {
-      name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
-      address: "Tashkent city, Yunusabad district, Bogishamol 21B",
-      phone: "+998 90 122 55 18",
-      email: "info@emctech.uz",
-      bankAccount: "2020 8000 0052 8367 7001",
-      mfo: "00419",
-      taxId: "307 738 207",
-      oked: "43299"
-    },
+    companyDetails: companyConfigs.emctech,
     deliveryTerms: {
       paymentTerms: "50% prepayment",
       deliveryTime: "6-12 weeks",
       incoterms: "DDP"
     },
-    authorizedSignatory: {
-      title: "General manager",
-      name: "S.S. Abdushukurov"
-    }
+    authorizedSignatory: companyConfigs.emctech.signatory
   });
   
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -104,7 +127,8 @@ const CreateProposalModal = ({
         clientId: "",
         clientName: "",
         clientEmail: "",
-        company: "Your Company Name",
+        company: "emctech",
+        companyName: companyConfigs.emctech.shortName,
         proposalTitle: "",
         proposalDate: new Date().toISOString().split('T')[0],
         validUntil: "",
@@ -115,25 +139,13 @@ const CreateProposalModal = ({
         status: "draft",
         templateType: "simple-commercial",
         documentNumber: "",
-        companyDetails: {
-          name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
-          address: "Tashkent city, Yunusabad district, Bogishamol 21B",
-          phone: "+998 90 122 55 18",
-          email: "info@emctech.uz",
-          bankAccount: "2020 8000 0052 8367 7001",
-          mfo: "00419",
-          taxId: "307 738 207",
-          oked: "43299"
-        },
+        companyDetails: companyConfigs.emctech,
         deliveryTerms: {
           paymentTerms: "50% prepayment",
           deliveryTime: "6-12 weeks",
           incoterms: "DDP"
         },
-        authorizedSignatory: {
-          title: "General manager",
-          name: "S.S. Abdushukurov"
-        }
+        authorizedSignatory: companyConfigs.emctech.signatory
       });
       setSelectedProducts([]);
       setRfqItems([]);
@@ -190,6 +202,19 @@ const CreateProposalModal = ({
     toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
     }, 3000);
+  };
+
+  // Handle company selection
+  const handleCompanyChange = (companyKey) => {
+    const selectedCompany = companyConfigs[companyKey];
+    setProposal(prev => ({
+      ...prev,
+      company: companyKey,
+      companyName: selectedCompany.shortName,
+      companyDetails: { ...selectedCompany },
+      authorizedSignatory: selectedCompany.signatory
+    }));
+    showToast(`Switched to ${selectedCompany.shortName}`, 'success');
   };
 
   // DEBUG: log incoming products (remove after verification)
@@ -294,45 +319,44 @@ const CreateProposalModal = ({
   };
 
   // Add product to proposal
- // In CreateProposalModal - update the handleAddProduct function
-const handleAddProduct = (product) => {
-  const quantity = parseInt(quantityInputs[product.id]) || 1;
-  const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
-  const discount = parseFloat(discountInputs[product.id]) || 0;
-  const taxable = taxToggle[product.id] !== false;
-  
-  if (quantity <= 0) {
-    showToast("Quantity must be greater than 0", 'error');
-    return;
-  }
+  const handleAddProduct = (product) => {
+    const quantity = parseInt(quantityInputs[product.id]) || 1;
+    const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
+    const discount = parseFloat(discountInputs[product.id]) || 0;
+    const taxable = taxToggle[product.id] !== false;
+    
+    if (quantity <= 0) {
+      showToast("Quantity must be greater than 0", 'error');
+      return;
+    }
 
-  const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
-  
-  if (existingProductIndex >= 0) {
-    const updatedProducts = [...selectedProducts];
-    updatedProducts[existingProductIndex].quantity += quantity;
-    setSelectedProducts(updatedProducts);
-  } else {
-    setSelectedProducts(prev => [...prev, {
-      ...product,
-      // FIX: Ensure imageUrl is properly set
-      imageUrl: product.imageUrl || product.thumbnail || '',
-      quantity,
-      unitPrice,
-      discount,
-      taxable,
-      lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
-    }]);
-  }
-  
-  // Reset inputs for this product
-  setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
-  setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
-  setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
-  setTaxToggle(prev => ({ ...prev, [product.id]: true }));
-  
-  showToast(`Added ${product.name} to proposal`, 'success');
-};
+    const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
+    
+    if (existingProductIndex >= 0) {
+      const updatedProducts = [...selectedProducts];
+      updatedProducts[existingProductIndex].quantity += quantity;
+      setSelectedProducts(updatedProducts);
+    } else {
+      setSelectedProducts(prev => [...prev, {
+        ...product,
+        // FIX: Ensure imageUrl is properly set
+        imageUrl: product.imageUrl || product.thumbnail || '',
+        quantity,
+        unitPrice,
+        discount,
+        taxable,
+        lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
+      }]);
+    }
+    
+    // Reset inputs for this product
+    setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
+    setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
+    setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
+    setTaxToggle(prev => ({ ...prev, [product.id]: true }));
+    
+    showToast(`Added ${product.name} to proposal`, 'success');
+  };
 
   // Handle Technical RFQ item changes
   const handleRfqItemChange = (field, value) => {
@@ -637,7 +661,8 @@ const handleAddProduct = (product) => {
         clientId: "",
         clientName: "",
         clientEmail: "",
-        company: "Your Company Name",
+        company: "emctech",
+        companyName: companyConfigs.emctech.shortName,
         proposalTitle: "",
         proposalDate: new Date().toISOString().split('T')[0],
         validUntil: "",
@@ -648,25 +673,13 @@ const handleAddProduct = (product) => {
         status: "draft",
         templateType: "simple-commercial",
         documentNumber: "",
-        companyDetails: {
-          name: "LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»",
-          address: "Tashkent city, Yunusabad district, Bogishamol 21B",
-          phone: "+998 90 122 55 18",
-          email: "info@emctech.uz",
-          bankAccount: "2020 8000 0052 8367 7001",
-          mfo: "00419",
-          taxId: "307 738 207",
-          oked: "43299"
-        },
+        companyDetails: companyConfigs.emctech,
         deliveryTerms: {
           paymentTerms: "50% prepayment",
           deliveryTime: "6-12 weeks",
           incoterms: "DDP"
         },
-        authorizedSignatory: {
-          title: "General manager",
-          name: "S.S. Abdushukurov"
-        }
+        authorizedSignatory: companyConfigs.emctech.signatory
       });
       setSelectedProducts([]);
       setRfqItems([]);
@@ -723,6 +736,9 @@ const handleAddProduct = (product) => {
                   {proposal.templateType.split('-').map(word => 
                     word.charAt(0).toUpperCase() + word.slice(1)
                   ).join(' ')}
+                </span>
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  {proposal.company === 'emctech' ? 'EMC Tech' : 'Innovamechanics'}
                 </span>
                 {autoSaveStatus === "saving" && (
                   <span className="text-orange-500 flex items-center">
@@ -783,14 +799,19 @@ const handleAddProduct = (product) => {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Template Description
+                      Company Selection
                     </label>
-                    <div className="text-sm text-gray-600 p-2 bg-gray-50 rounded border">
-                      {proposal.templateType === 'simple-commercial' && 'Clean commercial proposal without product images'}
-                      {proposal.templateType === 'technical-rfq' && 'Technical request for quotation format'}
-                      {proposal.templateType === 'commercial-with-images' && 'Commercial proposal with product images'}
-                      {proposal.templateType === 'technical-with-images' && 'Technical offer with item images and specs'}
-                    </div>
+                    <select
+                      value={proposal.company}
+                      onChange={(e) => handleCompanyChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="emctech">EMC Technology (emctech.uz)</option>
+                      <option value="innovamechanics">Innovamechanics.com</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selected: {proposal.companyName}
+                    </p>
                   </div>
                 </div>
 
@@ -1003,14 +1024,17 @@ const handleAddProduct = (product) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-                      <input
-                        type="text"
-                        name="company"
+                      <select
                         value={proposal.company}
-                        onChange={handleProposalChange}
+                        onChange={(e) => handleCompanyChange(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Your company name"
-                      />
+                      >
+                        <option value="emctech">EMC Technology (emctech.uz)</option>
+                        <option value="innovamechanics">Innovamechanics.com</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Selected: {proposal.companyName}
+                      </p>
                     </div>
                     
                     <div>
@@ -1970,7 +1994,7 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
             <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
             <textarea
               rows="6"
-              value={emailData.body || `Dear ${proposal.clientName},\n\nPlease find attached the proposal for your review.\n\nBest regards,\n${proposal.company}`}
+              value={emailData.body || `Dear ${proposal.clientName},\n\nPlease find attached the proposal for your review.\n\nBest regards,\n${proposal.companyName}`}
               onChange={(e) => onEmailDataChange(prev => ({ ...prev, body: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
