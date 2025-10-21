@@ -38,8 +38,8 @@ const CreateProposalModal = ({
       }
     },
     innovamechanics: {
-      name: "Innovamechanics",
-      shortName: "Innovamechanics.com", 
+      name: "Innova Mechanics Ltd",
+      shortName: "Innova Mechanics Ltd",
       address: "Tashkent, Uzbekistan",
       phone: "+998 90 123 45 67",
       email: "info@innovamechanics.com",
@@ -1023,21 +1023,6 @@ const CreateProposalModal = ({
                 {!collapsedSections.header && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-                      <select
-                        value={proposal.company}
-                        onChange={(e) => handleCompanyChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="emctech">EMC Technology (emctech.uz)</option>
-                        <option value="innovamechanics">Innovamechanics.com</option>
-                      </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Selected: {proposal.companyName}
-                      </p>
-                    </div>
-                    
-                    <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
                       <div className="flex gap-2">
                         <select
@@ -1938,6 +1923,7 @@ const ClientModal = ({ open, onClose, newClient, onNewClientChange, onAddClient 
           <button
             onClick={onAddClient}
             disabled={!newClient.name}
+           
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Add Client
@@ -1957,7 +1943,7 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
+           onClick={onClose}
 
     >
       <motion.div
