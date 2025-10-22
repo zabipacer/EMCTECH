@@ -6,7 +6,7 @@ import {
   FaPaperPlane, FaHistory, FaBuilding, FaFileAlt,
   FaCheck, FaExclamationTriangle, FaPercent, FaReceipt,
   FaSpinner, FaIndustry, FaFileInvoice, FaSignature,
-  FaDownload, FaImage, FaFileContract
+  FaDownload, FaImage, FaFileContract, FaInfoCircle
 } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductSelectionModal from "./ProductSelectionModal";
@@ -325,21 +325,35 @@ const CreateProposalModal = ({
     const discount = parseFloat(discountInputs[product.id]) || 0;
     const taxable = taxToggle[product.id] !== false;
     
+    // Validation
     if (quantity <= 0) {
       showToast("Quantity must be greater than 0", 'error');
       return;
     }
+    if (unitPrice < 0) {
+      showToast("Unit price cannot be negative", 'error');
+      return;
+    }
+    if (discount < 0 || discount > 100) {
+      showToast("Discount must be between 0% and 100%", 'error');
+      return;
+    }
 
     const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
-    
     if (existingProductIndex >= 0) {
       const updatedProducts = [...selectedProducts];
       updatedProducts[existingProductIndex].quantity += quantity;
+      updatedProducts[existingProductIndex].lineTotal = calculateLineTotal(
+        updatedProducts[existingProductIndex].unitPrice,
+        updatedProducts[existingProductIndex].quantity,
+        updatedProducts[existingProductIndex].discount,
+        updatedProducts[existingProductIndex].taxable
+      );
       setSelectedProducts(updatedProducts);
+      showToast(`Product already added. Quantity updated to ${updatedProducts[existingProductIndex].quantity}.`, 'info');
     } else {
       setSelectedProducts(prev => [...prev, {
         ...product,
-        // FIX: Ensure imageUrl is properly set
         imageUrl: product.imageUrl || product.thumbnail || '',
         quantity,
         unitPrice,
@@ -347,6 +361,7 @@ const CreateProposalModal = ({
         taxable,
         lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
       }]);
+      showToast(`Added ${product.name} to proposal`, 'success');
     }
     
     // Reset inputs for this product
@@ -354,8 +369,6 @@ const CreateProposalModal = ({
     setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
     setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
     setTaxToggle(prev => ({ ...prev, [product.id]: true }));
-    
-    showToast(`Added ${product.name} to proposal`, 'success');
   };
 
   // Handle Technical RFQ item changes
@@ -397,8 +410,16 @@ const CreateProposalModal = ({
 
   // Add RFQ item
   const addRfqItem = () => {
-    if (!currentRfqItem.description) {
+    if (!currentRfqItem.description || !currentRfqItem.description.trim()) {
       showToast('Item description is required', 'error');
+      return;
+    }
+    if (currentRfqItem.quantity && currentRfqItem.quantity <= 0) {
+      showToast('Quantity must be greater than 0', 'error');
+      return;
+    }
+    if (currentRfqItem.unitPrice != null && currentRfqItem.unitPrice < 0) {
+      showToast('Unit price cannot be negative', 'error');
       return;
     }
 
@@ -411,7 +432,6 @@ const CreateProposalModal = ({
 
     setRfqItems(prev => [...prev, newItem]);
     
-    // Reset current item
     setCurrentRfqItem({
       description: "",
       technicalDescription: "",
@@ -480,19 +500,24 @@ const CreateProposalModal = ({
 
   // Add new client
   const handleAddClient = async () => {
-    if (!newClient.name) {
+    if (!newClient.name || !newClient.name.trim()) {
       showToast('Client name is required', 'error');
+      return;
+    }
+    if (newClient.email && !isValidEmail(newClient.email)) {
+      showToast('Please enter a valid email address', 'error');
       return;
     }
 
     try {
+      setIsLoading(true);
       const newClientId = await onAddClient(newClient);
       
       setProposal(prev => ({
         ...prev,
-        clientId: newClientId,
+        clientId: String(newClientId),
         clientName: newClient.name,
-        clientEmail: newClient.email
+        clientEmail: newClient.email || ''
       }));
       
       setNewClient({ name: "", email: "", phone: "", company: "" });
@@ -501,7 +526,9 @@ const CreateProposalModal = ({
       showToast('Client added successfully', 'success');
     } catch (error) {
       console.error('Error adding client:', error);
-      showToast('Error adding client: ' + error.message, 'error');
+      showToast(`Error adding client: ${error?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -573,20 +600,14 @@ const CreateProposalModal = ({
 
   // Generate PDF
   const handleGeneratePDF = async () => {
+    const validationErrors = validateProposalEnhanced('generate');
+    if (validationErrors.length > 0) {
+      showToast(validationErrors[0], 'error');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      
-      // Validate based on template type
-      if (proposal.templateType.includes('commercial') && selectedProducts.length === 0) {
-        showToast('Please add products before generating PDF', 'error');
-        return;
-      }
-      
-      if (proposal.templateType.includes('technical') && rfqItems.length === 0) {
-        showToast('Please add technical items before generating PDF', 'error');
-        return;
-      }
-
       const payload = {
         proposal,
         selectedProducts,
@@ -597,12 +618,13 @@ const CreateProposalModal = ({
         grandTotal,
         formatCurrency
       };
-      
       await downloadProposalPdf(payload);
       showToast('PDF generated successfully', 'success');
+      addActivityLog('PDF generated', 'You');
     } catch (err) {
       console.error('Error generating PDF:', err);
-      showToast('Failed to generate PDF: ' + err.message, 'error');
+      const msg = err?.message || String(err) || 'Unknown error';
+      showToast(`Failed to generate PDF: ${msg}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -610,25 +632,15 @@ const CreateProposalModal = ({
 
   // Save proposal
   const handleSaveProposal = async (status = 'draft') => {
+    const action = status === 'sent' ? 'send' : 'save';
+    const validationErrors = validateProposalEnhanced(action);
+    if (validationErrors.length > 0) {
+      showToast(validationErrors[0], 'error');
+      return;
+    }
+
     if (typeof onSave !== 'function') {
-      console.warn('onSave handler not provided');
       showToast('Save handler not available', 'error');
-      return;
-    }
-
-    // Validate based on template type
-    if (proposal.templateType.includes('commercial') && selectedProducts.length === 0) {
-      showToast('Please add products before saving', 'error');
-      return;
-    }
-    
-    if (proposal.templateType.includes('technical') && rfqItems.length === 0) {
-      showToast('Please add technical items before saving', 'error');
-      return;
-    }
-
-    if (!proposal.clientId || !proposal.proposalTitle) {
-      showToast('Please fill in all required fields', 'error');
       return;
     }
 
@@ -645,9 +657,17 @@ const CreateProposalModal = ({
         grandTotal
       };
       await onSave(payload);
+      addActivityLog(status === 'sent' ? 'Sent proposal' : 'Saved proposal', 'You');
+      showToast(status === 'sent' ? 'Proposal sent successfully' : 'Proposal saved successfully', 'success');
+      if (status === 'sent') setIsEmailModalOpen(false);
     } catch (err) {
       console.error('Error saving proposal:', err);
-      showToast(`Error saving proposal: ${err.message}`, 'error');
+      const msg = err?.message || String(err) || 'Unknown error';
+      if (/network/i.test(msg)) {
+        showToast('Network error. Please check your connection and try again.', 'error');
+      } else {
+        showToast(`Error saving proposal: ${msg}`, 'error');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -709,6 +729,121 @@ const CreateProposalModal = ({
   // Check if current template uses images
   const usesImages = () => {
     return proposal.templateType.includes('with-images');
+  };
+
+  // Enhanced email validator
+  const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(String(email || "").trim());
+  };
+
+  // Comprehensive validation (used by buttons / tooltips)
+  const validateProposalEnhanced = (action = 'save') => {
+    const errors = [];
+
+    // Basic required fields
+    if (!proposal.clientId) errors.push("Please select a client.");
+    if (!proposal.proposalTitle || !proposal.proposalTitle.trim()) errors.push("Proposal title is required.");
+
+    // Template-specific validations
+    if (proposal.templateType.includes('commercial')) {
+      if (selectedProducts.length === 0) errors.push("Add at least one product for commercial proposals.");
+      selectedProducts.forEach((product) => {
+        if (!product.quantity || product.quantity <= 0) {
+          errors.push(`Product '${product.name}' has invalid quantity.`);
+        }
+        if (product.unitPrice == null || product.unitPrice < 0) {
+          errors.push(`Product '${product.name}' has invalid unit price.`);
+        }
+        if (product.discount != null && (product.discount < 0 || product.discount > 100)) {
+          errors.push(`Product '${product.name}' has invalid discount (0-100%).`);
+        }
+      });
+    }
+
+    if (proposal.templateType.includes('technical')) {
+      if (rfqItems.length === 0) errors.push("Add at least one technical item.");
+      if (!proposal.documentNumber || !proposal.documentNumber.trim()) {
+        errors.push("Document number is required for technical proposals.");
+      }
+      if (!proposal.companyDetails?.name || !proposal.companyDetails.name.trim()) {
+        errors.push("Company legal name is required for technical proposals.");
+      }
+      rfqItems.forEach((item) => {
+        if (!item.description || !item.description.trim()) {
+          errors.push("All technical items must have a description.");
+        }
+        if (item.quantity && item.quantity <= 0) {
+          errors.push(`Technical item '${item.description}' has invalid quantity.`);
+        }
+        if (item.unitPrice != null && item.unitPrice < 0) {
+          errors.push(`Technical item '${item.description}' has invalid unit price.`);
+        }
+      });
+    }
+
+    // Send-specific validation
+    if (action === 'send') {
+      if (!proposal.clientEmail || !proposal.clientEmail.trim()) {
+        errors.push("Client email is required to send the proposal.");
+      } else if (!isValidEmail(proposal.clientEmail)) {
+        errors.push("Please enter a valid client email address.");
+      }
+    }
+
+    // Date and range validations
+    if (proposal.validUntil && proposal.proposalDate) {
+      const validUntilDate = new Date(proposal.validUntil);
+      const proposalDate = new Date(proposal.proposalDate);
+      if (validUntilDate < proposalDate) errors.push("Valid until date must be after proposal date.");
+    }
+    if (proposal.taxRate != null && (proposal.taxRate < 0 || proposal.taxRate > 100)) {
+      errors.push("Tax rate must be between 0% and 100%.");
+    }
+    if (proposal.discount != null && (proposal.discount < 0 || proposal.discount > 100)) {
+      errors.push("Proposal discount must be between 0% and 100%.");
+    }
+
+    return errors;
+  };
+
+  // Use enhanced validator for tooltip reasons
+  const getDisabledReason = (action) => {
+    const reason = validateProposalEnhanced(action)[0] || '';
+    return reason;
+  };
+
+  // Validation helper - returns array of error messages
+  const validateProposal = (action = 'save') => {
+    const errors = [];
+
+    if (!proposal.clientId) errors.push('Please select a client.');
+    if (!proposal.proposalTitle || !proposal.proposalTitle.trim()) errors.push('Proposal title is required.');
+
+    if (proposal.templateType.includes('commercial')) {
+      if (selectedProducts.length === 0) errors.push('Add at least one product for commercial proposals.');
+      // product-level checks (simple)
+      selectedProducts.forEach((p, i) => {
+        if (!p.quantity || p.quantity <= 0) errors.push(`Product "${p.name}" has invalid quantity.`);
+        if (p.unitPrice == null || p.unitPrice < 0) errors.push(`Product "${p.name}" has invalid unit price.`);
+      });
+    }
+
+    if (proposal.templateType.includes('technical')) {
+      if (rfqItems.length === 0) errors.push('Add at least one technical item.');
+      if (!proposal.documentNumber || !proposal.documentNumber.trim()) errors.push('Document number is required for technical proposals.');
+      if (!proposal.companyDetails?.name || !proposal.companyDetails.name.trim()) errors.push('Company legal name is required for technical proposals.');
+      // rfq item-level checks
+      rfqItems.forEach((it) => {
+        if (!it.description || !it.description.trim()) errors.push('All technical items must have a description.');
+      });
+    }
+
+    if (action === 'send') {
+      if (!proposal.clientEmail || !proposal.clientEmail.trim()) errors.push('Client email is required to send the proposal.');
+    }
+
+    return errors;
   };
 
   if (!open) return null;
@@ -1613,6 +1748,7 @@ const CreateProposalModal = ({
                 <div className="mt-6 space-y-3">
                   <button
                     onClick={handleGeneratePDF}
+                    title={getDisabledReason('generate') || undefined}
                     className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center font-medium"
                     disabled={
                       (usesProducts() && selectedProducts.length === 0) ||
@@ -1624,6 +1760,7 @@ const CreateProposalModal = ({
 
                   <button
                     onClick={() => handleSaveProposal("draft")}
+                    title={getDisabledReason('save') || undefined}
                     className="w-full bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center justify-center font-medium"
                     disabled={
                       (usesProducts() && selectedProducts.length === 0) ||
@@ -1637,17 +1774,14 @@ const CreateProposalModal = ({
 
                   <button
                     onClick={() => {
-                      if ((usesProducts() && selectedProducts.length === 0) ||
-                          (usesTechnicalItems() && rfqItems.length === 0)) {
-                        showToast(`Please add ${usesProducts() ? 'products' : 'technical items'} before sending`, 'error');
-                        return;
-                      }
-                      if (!proposal.clientEmail && !proposal.clientId) {
-                        showToast('Please select a client before sending', 'error');
+                      const validationErrors = validateProposal('send');
+                      if (validationErrors.length > 0) {
+                        showToast(validationErrors[0], 'error');
                         return;
                       }
                       setIsEmailModalOpen(true);
                     }}
+                    title={getDisabledReason('send') || undefined}
                     className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center justify-center font-medium"
                   >
                     <FaPaperPlane className="mr-2" /> Send Proposal
@@ -1745,7 +1879,8 @@ const CreateProposalModal = ({
           <div className="flex gap-3">
             <button
               onClick={() => handleSaveProposal("draft")}
-              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 font-medium"
+              title={getDisabledReason('save') || undefined}
+              className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
               disabled={
                 (usesProducts() && selectedProducts.length === 0) ||
                 (usesTechnicalItems() && rfqItems.length === 0) ||
@@ -1757,7 +1892,8 @@ const CreateProposalModal = ({
             </button>
             <button
               onClick={() => handleSaveProposal("sent")}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+              title={getDisabledReason('send') || undefined}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
               disabled={
                 (usesProducts() && selectedProducts.length === 0) ||
                 (usesTechnicalItems() && rfqItems.length === 0) ||
@@ -1771,23 +1907,35 @@ const CreateProposalModal = ({
         </div>
       </motion.div>
 
-      {/* Toast Notification */}
+      {/* Enhanced Toast Notification System */}
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg z-60 ${
-              toast.type === 'error' ? 'bg-red-500 text-white' :
-              toast.type === 'success' ? 'bg-green-500 text-white' :
-              'bg-blue-500 text-white'
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y:  20, scale: 0.98 }}
+            className={`fixed top-4 right-4 p-4 rounded-lg shadow-xl z-[100] max-w-sm w-auto border-l-4 ${
+              toast.type === 'error' ? 'bg-red-50 text-red-800 border-red-500' :
+              toast.type === 'success' ? 'bg-green-50 text-green-800 border-green-500' :
+              toast.type === 'warning' ? 'bg-yellow-50 text-yellow-800 border-yellow-500' :
+              'bg-blue-50 text-blue-800 border-blue-500'
             }`}
           >
-            <div className="flex items-center">
-              {toast.type === 'error' && <FaExclamationTriangle className="mr-2" />}
-              {toast.type === 'success' && <FaCheck className="mr-2" />}
-              <span>{toast.message}</span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                {toast.type === 'error' && <FaExclamationTriangle className="mt-0.5 text-red-500" />}
+                {toast.type === 'success' && <FaCheck className="mt-0.5 text-green-500" />}
+                {toast.type === 'warning' && <FaExclamationTriangle className="mt-0.5 text-yellow-500" />}
+                {toast.type === 'info' && <FaInfoCircle className="mt-0.5 text-blue-500" />}
+                <div className="text-sm leading-snug">{toast.message}</div>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="opacity-60 hover:opacity-100 ml-2 transition-opacity"
+                aria-label="Close toast"
+              >
+                <FaTimes size={14} />
+              </button>
             </div>
           </motion.div>
         )}
@@ -1923,7 +2071,6 @@ const ClientModal = ({ open, onClose, newClient, onNewClientChange, onAddClient 
           <button
             onClick={onAddClient}
             disabled={!newClient.name}
-           
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Add Client
@@ -1943,8 +2090,7 @@ const EmailModal = ({ open, onClose, proposal, emailData, onEmailDataChange, onS
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-           onClick={onClose}
-
+      onClick={onClose}
     >
       <motion.div
         className="bg-white rounded-xl shadow-2xl max-w-2xl w-full"

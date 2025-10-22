@@ -489,451 +489,173 @@ class EMCProposalPDF {
 
   async prepareData(proposalData) {
     const proposal = proposalData.proposal || proposalData;
-    const productsIn = proposalData.products || proposalData.selectedProducts || [];
-    
-    // Load company logos based on the sending company
     const sendingCompany = proposal.company || 'emctech';
-    
+    const templateType = proposal.templateType || '';
+    const isTechnical = templateType.includes('technical');
+    const hasImages = templateType.includes('with-images');
+
+    // Load company logos
     if (sendingCompany === 'emctech') {
       try {
         this.logos.emc = await this.imageLoader.loadImage(
           'https://i.ibb.co/Z1NxmgGT/Whats-App-Image-2025-10-20-at-19-18-39-a4aa3c8e.jpg',
           PDF_CONFIG.images.maxDimensionPx
         );
-      } catch (e) {
-        console.warn('EMC logo load failed', e);
-      }
+      } catch (e) { console.warn('EMC logo load failed', e); }
     } else if (sendingCompany === 'innovamechanics') {
       try {
         this.logos.innova = await this.imageLoader.loadImage(
           'https://i.ibb.co/Csmh58wr/Whats-App-Image-2025-10-20-at-19-20-15-54c63aa3.jpg',
           PDF_CONFIG.images.maxDimensionPx
         );
-      } catch (e) {
-        console.warn('INNOVA logo load failed', e);
-      }
+      } catch (e) { console.warn('INNOVA logo load failed', e); }
     }
-    
-    // Use sequential numbers for products instead of long IDs
-    const products = await Promise.all(productsIn.map(async (p, i) => {
-      let imageMeta = null; 
-      const url = p.image || p.imageUrl || p.img; 
-      if (url) { 
-        try { 
-          imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); 
-        } catch(e) { 
-          console.warn('Image load failed', e); 
-          imageMeta = null; 
-        } 
-      }
-      
-      return {
-        number: (i + 1).toString(),
-        name: typeof p.name === 'object' ? (p.name.EN || Object.values(p.name)[0] || '') : (p.name || 'Product Name'),
-        description: p.description || p.details || p.seo?.description || 'Product description will be provided.',
-        unit: p.unit || 'SET', 
-        quantity: p.quantity || 1, 
-        unitPrice: p.unitPrice || p.price || 0, 
-        imageMeta
-      };
-    }));
 
-    // Get company data from proposal
+    // Company/terms
     const companyData = proposal.companyDetails || {};
     const termsData = proposal.terms || proposal.deliveryTerms || {};
-    
-    this.data = {
-      company: {
-        name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'), 
-        shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innovamechanics')),
-        address: this._toPlainString(companyData.address || proposal.address || 'Tashkent city, Yunusabad district, Bogishamot 21B'), 
-        phone: this._toPlainString(companyData.phone || proposal.phone || '+998 90 122 55 18'),
-        email: this._toPlainString(companyData.email || proposal.email || 'info@emctech.uz'), 
-        bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'), 
-        mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'), 
-        taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'), 
-        oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
-      },
-      metadata: { 
-        number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'), 
-        date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
-        recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
-        documentNumber: this._toPlainString(proposal.documentNumber || '')
-      },
-      terms: { 
-        payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'), 
-        deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'), 
-        delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
-        validity: this._toPlainString(proposal.validity || '30 days'),
-        warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
-      },
-      signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'), 
-      products,
-      sendingCompany: sendingCompany
-    };
 
-    // preload partner logos for the "OUR PARTNERS" section
-    try {
-      this.data.partnerLogos = await this.loadPartnerLogos();
-    } catch (e) {
-      console.warn('Partner logos preload failed', e);
-      this.data.partnerLogos = [];
-    }
-
-    this.data.subtotal = this.data.products.reduce((s, p) => s + (p.unitPrice * p.quantity), 0);
-    this.data.taxAmount = this.data.subtotal * 0.12;
-    this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
-  }
-
-  async loadPartnerLogos() {
-    const partnerUrls = [
-      'https://i.ibb.co/Kc08wPDR/Whats-App-Image-2025-10-21-at-13-34-35-4adb7bae.jpg',
-      'https://i.ibb.co/QFwSvL9x/Whats-App-Image-2025-10-21-at-13-34-35-74d70f65.jpg',
-      'https://i.ibb.co/wZwb8gCL/Whats-App-Image-2025-10-21-at-13-34-35-0976c6a2.jpg',
-      
-      'https://i.ibb.co/3Yscy8Rd/Whats-App-Image-2025-10-21-at-13-34-35-523241c3.jpg',
-      'https://i.ibb.co/cK0XdCJc/Whats-App-Image-2025-10-21-at-13-34-35-cace941f.jpg',
-      'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
-      'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
-      'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
-      'https://i.ibb.co/WNBT0rTm/Whats-App-Image-2025-10-21-at-13-35-41-d72914c0.jpg',
-      'https://i.ibb.co/ynKKyB7t/Whats-App-Image-2025-10-21-at-13-34-35-0339566a.jpg'
-    ];
-
-    const loaded = [];
-    for (const url of partnerUrls) {
-      try {
-        const meta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx);
-        loaded.push(meta || null);
-      } catch (e) {
-        console.warn('Failed to load partner logo', e);
-        loaded.push(null);
-      }
-    }
-    return loaded;
-  }
-
-  async generate(proposalData, options = {}) {
-    try { 
-      this.initializePDF(options); 
-      await this.prepareData(proposalData); 
-      this.colWidths = this.colPercentsToWidths(); 
-      await this.renderDocument(); 
-      const fileName = `${this.data.metadata.number || 'proposal'}-proposal.pdf`.replace(/[^^\w.-]/g, '_'); 
-      this.doc.save(fileName); 
-      return fileName; 
-    } catch (err) { 
-      console.error('PDF generation failed', err); 
-      throw new PDFGenerationError('Failed to generate PDF', err); 
-    } finally { 
-      this.imageLoader.clearCache(); 
-    }
-  }
-
-  _debugBox(x, y, w, h, fontSizePt, lines) {
-    if (!this.debug) return;
-    try {
-      const doc = this.doc;
-      doc.setDrawColor(255, 0, 0); 
-      doc.setLineWidth(0.3);
-      doc.rect(x, y, w, h);
-      doc.setFontSize(5); 
-      doc.setTextColor(255, 0, 0);
-      const overlay = `fs:${fontSizePt}pt ln:${lines ? lines.length : 0}`;
-      doc.text(overlay, x + 1, y + 1);
-      doc.setTextColor(0, 0, 0);
-    } catch(e) { /* ignore debug drawing errors */ }
-  }
-
-  async renderDocument() { 
-    if (!this.colWidths || this.colWidths.length === 0) this.colWidths = this.colPercentsToWidths(); 
-    this.renderHeader(); 
-    this.renderTitle(); 
-    this.renderIntro(); 
-    this.renderTable(); 
-    this.renderTotals(); 
-    this.renderNotes(); 
-    this.renderSignature(); 
-    this.renderLogos(); 
-  }
-
-  renderHeader() { 
-    const doc = this.doc; 
-    const layout = this.layout; 
-    const margin = PDF_CONFIG.page.margin; 
-    const y = layout.getY(); 
-    const pageW = layout.pageWidth; 
-    
-    // Logo dimensions
-    const logoW = PDF_CONFIG.images.logoWidth;
-    const logoH = PDF_CONFIG.images.logoHeight;
-    
-    // Header with better spacing
-    const headerPadding = PDF_CONFIG.spacing.md;
-    const headerContentWidth = pageW - margin * 2;
-    const companyInfoWidth = headerContentWidth - logoW - PDF_CONFIG.spacing.md;
-    
-    // Company info fitting
-    const companyNameFit = this.measurer.fitFontSizeToBox(
-      this.data.company.name, 
-      'helvetica', 
-      PDF_CONFIG.fonts.headerSize, 
-      10, 
-      companyInfoWidth, 
-      30
-    );
-    
-    // Contact info
-    const contactInfo = `${this.data.company.address} | Phone: ${this.data.company.phone}`;
-    const bankInfo = `Bank: ${this.data.company.bankAccount} | MFO: ${this.data.company.mfo} | ID: ${this.data.company.taxId}`;
-    
-    const contactFit = this.measurer.fitFontSizeToBox(contactInfo, 'helvetica', 8, 6, companyInfoWidth, 20);
-    const bankFit = this.measurer.fitFontSizeToBox(bankInfo, 'helvetica', 8, 6, companyInfoWidth, 20);
-    
-    // Calculate total header height
-    const totalTextHeight = companyNameFit.totalHeight + contactFit.totalHeight + bankFit.totalHeight + PDF_CONFIG.spacing.sm * 2;
-    const headerHeight = Math.max(logoH + headerPadding * 2, totalTextHeight + headerPadding * 2);
-    
-    if (layout.getY() + headerHeight > layout.pageHeight - margin) {
-      layout.addPage();
-    }
-    
-    // Render appropriate logo based on sending company
-    const logoX = margin;
-    const logoY = y + (headerHeight - logoH) / 2;
-    
-    let logoToUse = null;
-    if (this.data.sendingCompany === 'emctech' && this.logos.emc && this.logos.emc.dataUrl) {
-      logoToUse = this.logos.emc;
-    } else if (this.data.sendingCompany === 'innovamechanics' && this.logos.innova && this.logos.innova.dataUrl) {
-      logoToUse = this.logos.innova;
-    }
-    
-    if (logoToUse) {
-      try {
-        const maxLogoW = logoW;
-        const maxLogoH = logoH;
-        
-        let targetW = maxLogoW;
-        const pmw = logoToUse.width || 1;
-        const pmh = logoToUse.height || 1;
-        let targetH = (pmh / pmw) * targetW;
-        
-        if (targetH > maxLogoH) {
-          targetH = maxLogoH;
-          targetW = (pmw / pmh) * targetH;
+    // Prepare data for each type
+    if (isTechnical) {
+      // Technical offer
+      const rfqItemsIn = proposalData.rfqItems || proposalData.items || [];
+      const items = await Promise.all((rfqItemsIn || []).map(async (item, i) => {
+        let imageMeta = null;
+        const url = (item.imageUrl || item.image || item.img);
+        if (url && hasImages) {
+          try { imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); }
+          catch (e) { imageMeta = null; }
         }
-        
-        const finalX = logoX + (logoW - targetW) / 2;
-        const finalY = logoY + (logoH - targetH) / 2;
-        
-        const mime = (logoToUse.mime && logoToUse.mime.includes('png')) ? 'PNG' : 'JPEG';
-        doc.addImage(logoToUse.dataUrl, mime, finalX, finalY, targetW, targetH);
-      } catch(e) {
-        console.warn('Logo rendering failed, using fallback', e);
-        this.renderLogoPlaceholder(doc, logoX, logoY, logoW, logoH, this.data.company.shortName);
-      }
+        return {
+          number: (i + 1).toString(),
+          name: (item.description || item.name || 'Technical Item').toString(),
+          description: item.technicalDescription || item.description || '',
+          specifications: Array.isArray(item.specifications) ? item.specifications : (item.specs || []),
+          manufacturer: item.manufacturer || '',
+          partNumber: item.partNumber || item.pn || '',
+          unit: item.unit || 'each',
+          quantity: item.quantity || 1,
+          unitPrice: item.unitPrice || item.price || 0,
+          willBeSupplied: item.willBeSupplied || '',
+          imageMeta,
+          raw: item,
+          isTechnical: true
+        };
+      }));
+
+      this.data = {
+        company: {
+          name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
+          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innovamechanics')),
+          address: this._toPlainString(companyData.address || proposal.address || 'Tashkent city, Yunusabad district, Bogishamot 21B'),
+          phone: this._toPlainString(companyData.phone || proposal.phone || '+998 90 122 55 18'),
+          email: this._toPlainString(companyData.email || proposal.email || 'info@emctech.uz'),
+          bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
+          mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
+          taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
+          oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
+        },
+        metadata: {
+          number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
+          date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
+          recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
+          documentNumber: this._toPlainString(proposal.documentNumber || '')
+        },
+        terms: {
+          payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
+          deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
+          delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
+          validity: this._toPlainString(proposal.validity || '30 days'),
+          warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
+        },
+        signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
+        items,
+        sendingCompany,
+        isTechnical: true,
+        hasImages,
+        templateType
+      };
+
+      // Partner logos
+      try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
+
+      this.data.subtotal = (this.data.items || []).reduce((s, it) => s + ((it.unitPrice || 0) * (it.quantity || 1)), 0);
+      this.data.taxAmount = this.data.subtotal * 0.12;
+      this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
+
     } else {
-      this.renderLogoPlaceholder(doc, logoX, logoY, logoW, logoH, this.data.company.shortName);
-    }
-    
-    // Company info
-    const infoX = logoX + logoW + PDF_CONFIG.spacing.md;
-    const infoY = y + headerPadding;
-    
-    // Company name
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(companyNameFit.fontSize);
-    doc.setTextColor(...PDF_CONFIG.colors.primary);
-    companyNameFit.lines.forEach((line, i) => {
-      doc.text(line, infoX, infoY + i * this.lineHeightForFontSize(companyNameFit.fontSize));
-    });
-    
-    let currentY = infoY + companyNameFit.totalHeight + PDF_CONFIG.spacing.sm;
-    
-    // Contact info
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(contactFit.fontSize);
-    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-    contactFit.lines.forEach((line, i) => {
-      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit.fontSize));
-    });
-    
-    currentY += contactFit.totalHeight + 2;
-    
-    // Bank info
-    doc.setFontSize(bankFit.fontSize);
-    bankFit.lines.forEach((line, i) => {
-      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(bankFit.fontSize));
-    });
-    
-    // Proposal metadata (right aligned) - MOVED DOWN to avoid overlap
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(...PDF_CONFIG.colors.accent);
-
-    // Calculate where to start based on company name height to avoid overlap
-    const metadataStartY = infoY + companyNameFit.totalHeight + 4;
-
-    if (this.data.metadata.documentNumber) {
-      doc.text(`Document: ${this.data.metadata.documentNumber}`, pageW - margin, metadataStartY, { align: 'right' });
-      doc.text(`Proposal: ${this.data.metadata.number}`, pageW - margin, metadataStartY + 6, { align: 'right' });
-    } else {
-      doc.text(`Proposal: ${this.data.metadata.number}`, pageW - margin, metadataStartY, { align: 'right' });
-    }
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-    doc.text(`Date: ${this.data.metadata.date}`, pageW - margin, metadataStartY + 12, { align: 'right' });
-    doc.text(this.data.metadata.recipient, pageW - margin, metadataStartY + 18, { align: 'right' });
-    
-    // RED LINE - Now placed on the next line after header content
-    const redLineY = y + headerHeight + PDF_CONFIG.spacing.sm;
-    layout.drawLine(margin, redLineY, pageW - margin, redLineY, PDF_CONFIG.colors.redLine, 1);
-    
-    layout.setY(redLineY + PDF_CONFIG.spacing.md);
-    
-    if (this.debug) {
-      this._debugBox(infoX, infoY, companyInfoWidth, totalTextHeight, companyNameFit.fontSize, companyNameFit.lines);
-    }
-  }
-
-  renderLogoPlaceholder(doc, x, y, w, h, text) {
-    doc.setFillColor(...PDF_CONFIG.colors.primary);
-    doc.roundedRect(x, y, w, h, 2, 2, 'F');
-    
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text(text, x + w / 2, y + h / 2 + 1, { align: 'center' });
-  }
-
-  renderTitle() { 
-    const doc = this.doc; 
-    const layout = this.layout; 
-    const centerX = layout.pageWidth / 2; 
-    
-    const titleBoxW = layout.pageWidth - PDF_CONFIG.page.margin * 2;
-    const titleFit = this.measurer.fitFontSizeToBox('COMMERCIAL OFFER', 'helvetica', PDF_CONFIG.fonts.titleSize, 11, titleBoxW, 15);
-    
-    // Enhanced title design with accent color
-    doc.setFillColor(...PDF_CONFIG.colors.primary);
-    doc.roundedRect(PDF_CONFIG.page.margin, layout.getY(), titleBoxW, 14, 2, 2, 'F');
-    
-    // Title text with white color for better contrast
-    doc.setFont('helvetica', 'bold'); 
-    doc.setFontSize(titleFit.fontSize); 
-    doc.setTextColor(255, 255, 255); 
-    doc.text('COMMERCIAL OFFER', centerX, layout.getY() + 8, { align: 'center' }); 
-    
-    if (this.debug) {
-      this._debugBox(PDF_CONFIG.page.margin, layout.getY(), titleBoxW, 14, titleFit.fontSize, titleFit.lines);
-    }
-    
-    layout.moveDown(18);
-  }
-
-  renderIntro() { 
-  const doc = this.doc; 
-  const layout = this.layout; 
-  const margin = PDF_CONFIG.page.margin; 
-  
-  const before = 'We are pleased to present our commercial offer from ';
-  const company = this.data.company.name;
-  const after = ' for the supply of high-quality products as detailed below:';
-  
-  const availableWidth = layout.pageWidth - margin * 2;
-  const boxPadding = 6;
-  const maxTextWidth = availableWidth - (boxPadding * 2);
-
-  // Use the text measurer to properly wrap text within the box
-  const introText = before + company + after;
-  const introFit = this.measurer.fitFontSizeToBox(
-    introText, 
-    'helvetica', 
-    PDF_CONFIG.fonts.bodySize, 
-    9, 
-    maxTextWidth, 
-    50, 
-    1.3
-  );
-
-  const lineHeight = this.lineHeightForFontSize(introFit.fontSize);
-  const boxHeight = Math.max(30, introFit.totalHeight + 10);
-
-  // Enhanced intro design with subtle border
-  doc.setFillColor(...PDF_CONFIG.colors.lightGray);
-  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3, 'F');
-  
-  doc.setDrawColor(...PDF_CONFIG.colors.primary);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3);
-
-  const textY = layout.getY() + boxPadding;
-  let currentX = margin + boxPadding;
-  let currentY = textY;
-
-  // Now render each line with proper styling for the company name
-  for (let lineIndex = 0; lineIndex < introFit.lines.length; lineIndex++) {
-    const line = introFit.lines[lineIndex];
-    currentX = margin + boxPadding; // Reset X for each new line
-    
-    // Check if this line contains the company name
-    if (line.includes(company)) {
-      const beforeIndex = line.indexOf(before);
-      const companyIndex = line.indexOf(company);
-      
-      if (companyIndex > -1) {
-        // Render text before company name
-        const beforeText = line.substring(0, companyIndex);
-        if (beforeText) {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(introFit.fontSize);
-          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-          doc.text(beforeText, currentX, currentY);
-          currentX += doc.getTextWidth(beforeText);
+      // Commercial offer
+      const productsIn = proposalData.products || proposalData.selectedProducts || [];
+      const products = await Promise.all(productsIn.map(async (p, i) => {
+        let imageMeta = null;
+        const url = p.image || p.imageUrl || p.img;
+        if (url) {
+          try { imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); }
+          catch (e) { imageMeta = null; }
         }
-        
-        // Render company name
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...PDF_CONFIG.colors.accent);
-        doc.text(company, currentX, currentY);
-        currentX += doc.getTextWidth(company);
-        
-        // Render text after company name
-        const afterText = line.substring(companyIndex + company.length);
-        if (afterText) {
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-          doc.text(afterText, currentX, currentY);
-        }
-      }
-    } else {
-      // Render normal line without company name
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(introFit.fontSize);
-      doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-      doc.text(line, currentX, currentY);
+        return {
+          number: (i + 1).toString(),
+          name: typeof p.name === 'object' ? (p.name.EN || Object.values(p.name)[0] || '') : (p.name || 'Product Name'),
+          description: p.description || p.details || p.seo?.description || 'Product description will be provided.',
+          unit: p.unit || 'SET',
+          quantity: p.quantity || 1,
+          unitPrice: p.unitPrice || p.price || 0,
+          imageMeta,
+          raw: p,
+          isTechnical: false
+        };
+      }));
+
+      this.data = {
+        company: {
+          name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
+          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innovamechanics')),
+          address: this._toPlainString(companyData.address || proposal.address || 'Tashkent city, Yunusabad district, Bogishamot 21B'),
+          phone: this._toPlainString(companyData.phone || proposal.phone || '+998 90 122 55 18'),
+          email: this._toPlainString(companyData.email || proposal.email || 'info@emctech.uz'),
+          bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
+          mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
+          taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
+          oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
+        },
+        metadata: {
+          number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
+          date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
+          recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
+          documentNumber: this._toPlainString(proposal.documentNumber || '')
+        },
+        terms: {
+          payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
+          deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
+          delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
+          validity: this._toPlainString(proposal.validity || '30 days'),
+          warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
+        },
+        signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
+        products,
+        sendingCompany,
+        isTechnical: false,
+        hasImages,
+        templateType
+      };
+
+      // Partner logos
+      try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
+
+      this.data.subtotal = (this.data.products || []).reduce((s, p) => s + (p.unitPrice * p.quantity), 0);
+      this.data.taxAmount = this.data.subtotal * 0.12;
+      this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
     }
-    
-    // Move to next line
-    currentY += lineHeight;
   }
 
-  if (this.debug) {
-    this._debugBox(margin, layout.getY(), availableWidth, boxHeight, introFit.fontSize, introFit.lines);
-  }
-
-  layout.moveDown(boxHeight + 4);
-}
-  renderTable() { 
-    this.renderTableHeader(); 
-    this.renderCategoryRow('TESTING AND MEASURING EQUIPMENT'); 
-    for (const product of this.data.products) {
-      this.renderProductRowWithFlow(product); 
+  renderTable() {
+    this.renderTableHeader();
+    this.renderCategoryRow(this.data.isTechnical ? 'TECHNICAL ITEMS' : 'TESTING AND MEASURING EQUIPMENT');
+    const arr = this.data.isTechnical ? this.data.items : this.data.products;
+    for (const product of arr) {
+      this.renderProductRowWithFlow(product);
     }
-    this.layout.moveDown(6); 
+    this.layout.moveDown(6);
   }
 
   renderTableHeader() { 
@@ -1048,7 +770,11 @@ class EMCProposalPDF {
     const layout = this.layout; 
     const margin = PDF_CONFIG.page.margin; 
     const padding = PDF_CONFIG.table.cellPadding; 
-    
+
+    // Use correct array for rowIndex
+    const arr = this.data.isTechnical ? this.data.items : this.data.products;
+    const rowIndex = arr.indexOf(product);
+
     // Measure text content with better constraints and improved column widths
     const nameW = this.colWidths[1] - padding * 2;
     const nameFit = this.measurer.fitFontSizeToBox(
@@ -1094,10 +820,9 @@ class EMCProposalPDF {
     const rowY = layout.getY(); 
     
     // Enhanced alternate row coloring for better readability
-    const rowIndex = this.data.products.indexOf(product);
     if (rowIndex % 2 === 0) {
       doc.setFillColor(...PDF_CONFIG.colors.lightGray);
-      doc.rect(margin, rowY, this.usableWidth, rowHeight, 'F');
+      doc.rect(margin, layout.getY(), this.usableWidth, /* rowHeight */ 0, 'F'); // rowHeight will be set below
     }
     
     // Draw cell borders with better styling
@@ -1256,6 +981,15 @@ class EMCProposalPDF {
     doc.setLineWidth(0.5);
     doc.roundedRect(x + padding, y + padding, w - padding * 2, h - padding * 2, 3, 3);
 
+    doc.setFontSize(7);
+    doc.setTextColor(160, 160, 160);
+    doc.setFont('helvetica', 'normal');
+
+    const placeholderText = 'No Image';
+    const textWidth = doc.getTextWidth(placeholderText);
+    const textX = x + (w - textWidth) / 2;
+    const textY = y + h / 2 + 2;
+
     // Camera icon representation
     const centerX = x + w / 2;
     const centerY = y + h / 2;
@@ -1265,16 +999,6 @@ class EMCProposalPDF {
     doc.roundedRect(centerX - 4, centerY - 6, 8, 6, 1, 1, 'F');
     doc.setFillColor(200, 200, 200);
     doc.circle(centerX, centerY, 3, 'F');
-
-    // Text
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    doc.setFont('helvetica', 'normal');
-
-    const placeholderText = 'No Image';
-    const textWidth = doc.getTextWidth(placeholderText);
-    const textX = centerX - textWidth / 2;
-    const textY = centerY + 8;
 
     doc.text(placeholderText, textX, textY);
   }
@@ -1358,52 +1082,59 @@ class EMCProposalPDF {
     
     const bulletIndent = 5; 
     const lineHeight = this.lineHeightForFontSize(9);
+    const labelSpacing = 2; // space between label and text
     
     notes.forEach(note => { 
-      const fullText = `${note.label} ${note.text}`;
-      const fit = this.measurer.fitFontSizeToBox(
-        fullText, 
-        'helvetica', 
-        9, 
-        7, 
-        layout.pageWidth - margin * 2 - bulletIndent, 
-        30
-      );
+      // Process each note separately for better control
+      const labelText = note.label;
+      const valueText = note.text;
       
-      const blockH = fit.lines.length * this.lineHeightForFontSize(fit.fontSize) + 2; 
+      // Measure label width
+      doc.setFont('helvetica', 'bold'); 
+      doc.setFontSize(9);
+      const labelWidth = doc.getTextWidth(labelText);
+      
+      // Calculate available width for value text
+      const availableWidth = layout.pageWidth - margin * 2 - bulletIndent - labelWidth - labelSpacing;
+      
+      // Wrap value text
+      doc.setFont('helvetica', 'normal');
+      const valueLines = doc.splitTextToSize(valueText, availableWidth);
+      
+      const blockH = valueLines.length * lineHeight + 2; 
       
       if (layout.getY() + blockH > layout.pageHeight - margin - 50) { 
         layout.addPage(); 
       }
       
-      fit.lines.forEach((line, index) => { 
-        if (index === 0) { 
-          const label = note.label;
-          const rest = line.replace(label, '').trim();
-          
-          doc.setFont('helvetica', 'bold'); 
-          doc.setFontSize(fit.fontSize); 
-          doc.setTextColor(...PDF_CONFIG.colors.primary);
-          doc.text(label, margin + bulletIndent, layout.getY());
-          
-          doc.setFont('helvetica', 'normal'); 
-          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-          
-          if (rest) { 
-            const xOffset = margin + bulletIndent + doc.getTextWidth(label) + 1;
-            doc.text(rest, xOffset, layout.getY()); 
-          } 
-        } else { 
-          doc.setFontSize(fit.fontSize); 
-          doc.text(line, margin + bulletIndent, layout.getY()); 
-        } 
-        layout.moveDown(this.lineHeightForFontSize(fit.fontSize)); 
-      }); 
+      // Render label
+      doc.setFont('helvetica', 'bold'); 
+      doc.setFontSize(9); 
+      doc.setTextColor(...PDF_CONFIG.colors.primary);
+      doc.text(labelText, margin + bulletIndent, layout.getY());
       
-      layout.moveDown(2); 
+      // Render value text with proper spacing
+      doc.setFont('helvetica', 'normal'); 
+      doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+      
+      const textStartX = margin + bulletIndent + labelWidth + labelSpacing;
+      
+      valueLines.forEach((line, index) => {
+        if (index === 0) {
+          // First line on same line as label
+          doc.text(line, textStartX, layout.getY());
+        } else {
+          // Continuation lines indented to align with first line
+          layout.moveDown(lineHeight);
+          doc.text(line, textStartX, layout.getY());
+        }
+      });
+      
+      // Move down for next item
+      layout.moveDown(lineHeight + 2);
       
       if (this.debug) {
-        this._debugBox(margin, layout.getY() - blockH - 2, layout.pageWidth - margin * 2, blockH, fit.fontSize, fit.lines);
+        this._debugBox(margin, layout.getY() - blockH - 2, layout.pageWidth - margin * 2, blockH, 9, valueLines);
       }
     }); 
     
@@ -1573,6 +1304,371 @@ class EMCProposalPDF {
     doc.setFontSize(5);
     doc.setTextColor(200, 200, 200);
     doc.text('LOGO', x + w / 2, y + h - 4, { align: 'center' });
+  }
+
+  // Add this method to avoid runtime error
+  async loadPartnerLogos() {
+    const partnerUrls = [
+      'https://i.ibb.co/Kc08wPDR/Whats-App-Image-2025-10-21-at-13-34-35-4adb7bae.jpg',
+      'https://i.ibb.co/QFwSvL9x/Whats-App-Image-2025-10-21-at-13-34-35-74d70f65.jpg',
+      'https://i.ibb.co/wZwb8gCL/Whats-App-Image-2025-10-21-at-13-34-35-0976c6a2.jpg',
+      'https://i.ibb.co/3Yscy8Rd/Whats-App-Image-2025-10-21-at-13-34-35-523241c3.jpg',
+      'https://i.ibb.co/cK0XdCJc/Whats-App-Image-2025-10-21-at-13-34-35-cace941f.jpg',
+      'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
+      'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
+      'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
+      'https://i.ibb.co/WNBT0rTm/Whats-App-Image-2025-10-21-at-13-35-41-d72914c0.jpg',
+      'https://i.ibb.co/ynKKyB7t/Whats-App-Image-2025-10-21-at-13-34-35-0339566a.jpg'
+    ];
+    const loaded = [];
+    for (const url of partnerUrls) {
+      try {
+        const meta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx);
+        loaded.push(meta || null);
+      } catch (e) {
+        console.warn('Failed to load partner logo', e);
+        loaded.push(null);
+      }
+    }
+    return loaded;
+  }
+
+  renderHeader() { 
+    const doc = this.doc; 
+    const layout = this.layout; 
+    const margin = PDF_CONFIG.page.margin; 
+    const y = layout.getY(); 
+    const pageW = layout.pageWidth; 
+
+    // Logo dimensions
+    const logoW = PDF_CONFIG.images.logoWidth;
+    const logoH = PDF_CONFIG.images.logoHeight;
+    const headerPadding = PDF_CONFIG.spacing.md;
+    const headerContentWidth = pageW - margin * 2;
+
+    // Allocate more space to company info, less to metadata
+    const companyInfoWidth = headerContentWidth * 0.65;
+    const metadataWidth = headerContentWidth * 0.35;
+
+    // Company info with smaller fonts for contact details
+    const companyNameFit = this.measurer.fitFontSizeToBox(
+      this.data.company.name, 
+      'helvetica', 
+      PDF_CONFIG.fonts.headerSize, 
+      10, 
+      companyInfoWidth, 
+      12
+    );
+    const contactLine1 = `${this.data.company.address}`;
+    const contactLine2 = `Phone: ${this.data.company.phone}`;
+    const contactLine3 = `Bank: ${this.data.company.bankAccount}`;
+    const contactLine4 = `MFO: ${this.data.company.mfo} | ID: ${this.data.company.taxId}`;
+    const contactFit1 = this.measurer.fitFontSizeToBox(contactLine1, 'helvetica', 7, 6, companyInfoWidth, 8);
+    const contactFit2 = this.measurer.fitFontSizeToBox(contactLine2, 'helvetica', 7, 6, companyInfoWidth, 8);
+    const contactFit3 = this.measurer.fitFontSizeToBox(contactLine3, 'helvetica', 7, 6, companyInfoWidth, 8);
+    const contactFit4 = this.measurer.fitFontSizeToBox(contactLine4, 'helvetica', 7, 6, companyInfoWidth, 8);
+
+    const totalTextHeight = companyNameFit.totalHeight + 
+      contactFit1.totalHeight + 
+      contactFit2.totalHeight + 
+      contactFit3.totalHeight + 
+      contactFit4.totalHeight + 
+      (PDF_CONFIG.spacing.xs * 3);
+
+    const headerHeight = Math.max(logoH + headerPadding * 2, totalTextHeight + headerPadding * 2);
+
+    if (layout.getY() + headerHeight > layout.pageHeight - margin) {
+      layout.addPage();
+    }
+
+    // Render logo
+    const logoX = margin;
+    const logoY = y + (headerHeight - logoH) / 2;
+    let logoToUse = null;
+    if (this.data.sendingCompany === 'emctech' && this.logos.emc && this.logos.emc.dataUrl) {
+      logoToUse = this.logos.emc;
+    } else if (this.data.sendingCompany === 'innovamechanics' && this.logos.innova && this.logos.innova.dataUrl) {
+      logoToUse = this.logos.innova;
+    }
+    if (logoToUse) {
+      try {
+        const maxLogoW = logoW;
+        const maxLogoH = logoH;
+        let targetW = maxLogoW;
+        const pmw = logoToUse.width || 1;
+        const pmh = logoToUse.height || 1;
+        let targetH = (pmh / pmw) * targetW;
+        if (targetH > maxLogoH) {
+          targetH = maxLogoH;
+          targetW = (pmw / pmh) * targetH;
+        }
+        const finalX = logoX + (logoW - targetW) / 2;
+        const finalY = logoY + (logoH - targetH) / 2;
+        const mime = (logoToUse.mime && logoToUse.mime.includes('png')) ? 'PNG' : 'JPEG';
+        doc.addImage(logoToUse.dataUrl, mime, finalX, finalY, targetW, targetH);
+      } catch(e) {
+        this.renderLogoPlaceholder(doc, logoX, logoY, logoW, logoH, this.data.company.shortName);
+      }
+    } else {
+      this.renderLogoPlaceholder(doc, logoX, logoY, logoW, logoH, this.data.company.shortName);
+    }
+
+    // Company info (left side)
+    const infoX = logoX + logoW + PDF_CONFIG.spacing.sm;
+    const infoY = y + headerPadding;
+
+    // Company name
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(companyNameFit.fontSize);
+    doc.setTextColor(...PDF_CONFIG.colors.primary);
+    companyNameFit.lines.forEach((line, i) => {
+      doc.text(line, infoX, infoY + i * this.lineHeightForFontSize(companyNameFit.fontSize));
+    });
+
+    let currentY = infoY + companyNameFit.totalHeight + 2;
+
+    // Contact info
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(contactFit1.fontSize);
+    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+    contactFit1.lines.forEach((line, i) => {
+      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit1.fontSize));
+    });
+    currentY += contactFit1.totalHeight;
+    contactFit2.lines.forEach((line, i) => {
+      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit2.fontSize));
+    });
+    currentY += contactFit2.totalHeight;
+    contactFit3.lines.forEach((line, i) => {
+      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit3.fontSize));
+    });
+    currentY += contactFit3.totalHeight;
+    contactFit4.lines.forEach((line, i) => {
+      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit4.fontSize));
+    });
+
+    // --- Fix: Always render metadata BELOW company info if not enough space ---
+
+    // Calculate the right block's starting Y: max(infoY, currentY)
+    let metadataStartY = infoY;
+    if (currentY > infoY + 2) {
+      metadataStartY = currentY + 2; // add a little gap
+    }
+
+    const metadataX = pageW - margin;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_CONFIG.colors.accent);
+    if (this.data.metadata.documentNumber) {
+      doc.text(`Document: ${this.data.metadata.documentNumber}`, metadataX, metadataStartY, { align: 'right' });
+      doc.text(`Proposal: ${this.data.metadata.number}`, metadataX, metadataStartY + 5, { align: 'right' });
+      metadataStartY += 10;
+    } else {
+      doc.text(`Proposal: ${this.data.metadata.number}`, metadataX, metadataStartY, { align: 'right' });
+      metadataStartY += 5;
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+    doc.text(`Date: ${this.data.metadata.date}`, metadataX, metadataStartY, { align: 'right' });
+    metadataStartY += 5;
+
+    // Recipient (wrapped if needed)
+    const recipientFit = this.measurer.fitFontSizeToBox(
+      this.data.metadata.recipient, 
+      'helvetica', 
+      8, 
+      6, 
+      metadataWidth, 
+      12
+    );
+    recipientFit.lines.forEach((line, i) => {
+      doc.text(line, metadataX, metadataStartY + (i * 4), { align: 'right' });
+    });
+
+    // RED LINE
+    const redLineY = y + headerHeight + PDF_CONFIG.spacing.sm;
+    layout.drawLine(margin, redLineY, pageW - margin, redLineY, PDF_CONFIG.colors.redLine, 1);
+    layout.setY(redLineY + PDF_CONFIG.spacing.md);
+
+    if (this.debug) {
+      this._debugBox(infoX, infoY, companyInfoWidth, totalTextHeight, companyNameFit.fontSize, companyNameFit.lines);
+      this._debugBox(metadataX - metadataWidth, metadataStartY, metadataWidth, 25, 8, []);
+    }
+}
+
+renderLogoPlaceholder(doc, x, y, w, h, text) {
+    doc.setFillColor(...PDF_CONFIG.colors.primary);
+    doc.roundedRect(x, y, w, h, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(text, x + w / 2, y + h / 2 + 1, { align: 'center' });
+}
+
+renderTitle() { 
+    const doc = this.doc; 
+    const layout = this.layout; 
+    const centerX = layout.pageWidth / 2; 
+    const titleText = this.data.isTechnical ? 'TECHNICAL OFFER' : 'COMMERCIAL OFFER';
+    const titleBoxW = layout.pageWidth - PDF_CONFIG.page.margin * 2;
+    const titleFit = this.measurer.fitFontSizeToBox(titleText, 'helvetica', PDF_CONFIG.fonts.titleSize, 11, titleBoxW, 15);
+    doc.setFillColor(...PDF_CONFIG.colors.primary);
+    doc.roundedRect(PDF_CONFIG.page.margin, layout.getY(), titleBoxW, 14, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold'); 
+    doc.setFontSize(titleFit.fontSize); 
+    doc.setTextColor(255, 255, 255); 
+    doc.text(titleText, centerX, layout.getY() + 8, { align: 'center' }); 
+    if (this.debug) {
+      this._debugBox(PDF_CONFIG.page.margin, layout.getY(), titleBoxW, 14, titleFit.fontSize, titleFit.lines);
+    }
+    layout.moveDown(18);
+}
+
+renderIntro() { 
+  const doc = this.doc; 
+  const layout = this.layout; 
+  const margin = PDF_CONFIG.page.margin; 
+  const before = this.data.isTechnical 
+    ? 'We are pleased to present our technical offer from '
+    : 'We are pleased to present our commercial offer from ';
+  const company = this.data.company.name;
+  const after = this.data.isTechnical
+    ? ' for the supply of technical equipment and services as detailed below:'
+    : ' for the supply of high-quality products as detailed below:';
+  const availableWidth = layout.pageWidth - margin * 2;
+  const boxPadding = 6;
+  const maxTextWidth = availableWidth - (boxPadding * 2);
+  const introText = before + company + after;
+  const introFit = this.measurer.fitFontSizeToBox(
+    introText, 
+    'helvetica', 
+    PDF_CONFIG.fonts.bodySize, 
+    9, 
+    maxTextWidth, 
+    50, 
+    1.3
+  );
+  const lineHeight = this.lineHeightForFontSize(introFit.fontSize);
+  const boxHeight = Math.max(30, introFit.totalHeight + 10);
+  doc.setFillColor(...PDF_CONFIG.colors.lightGray);
+  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3, 'F');
+  doc.setDrawColor(...PDF_CONFIG.colors.primary);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3);
+  const textY = layout.getY() + boxPadding;
+  let currentX = margin + boxPadding;
+  let currentY = textY;
+  for (let lineIndex = 0; lineIndex < introFit.lines.length; lineIndex++) {
+    const line = introFit.lines[lineIndex];
+    currentX = margin + boxPadding;
+    if (line.includes(company)) {
+      const beforeIndex = line.indexOf(before);
+      const companyIndex = line.indexOf(company);
+      if (companyIndex > -1) {
+        const beforeText = line.substring(0, companyIndex);
+        if (beforeText) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(introFit.fontSize);
+          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+          doc.text(beforeText, currentX, currentY);
+          currentX += doc.getTextWidth(beforeText);
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...PDF_CONFIG.colors.accent);
+        doc.text(company, currentX, currentY);
+        currentX += doc.getTextWidth(company);
+        const afterText = line.substring(companyIndex + company.length);
+        if (afterText) {
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+          doc.text(afterText, currentX, currentY);
+        }
+      }
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(introFit.fontSize);
+      doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+      doc.text(line, currentX, currentY);
+    }
+    currentY += lineHeight;
+  }
+  if (this.debug) {
+    this._debugBox(margin, layout.getY(), availableWidth, boxHeight, introFit.fontSize, introFit.lines);
+  }
+  layout.moveDown(boxHeight + 4);
+}
+
+  // 2. Replace your loadPartnerLogos with this:
+async loadPartnerLogos() {
+    const partnerUrls = [
+      'https://i.ibb.co/Kc08wPDR/Whats-App-Image-2025-10-21-at-13-34-35-4adb7bae.jpg',
+      'https://i.ibb.co/QFwSvL9x/Whats-App-Image-2025-10-21-at-13-34-35-74d70f65.jpg',
+      'https://i.ibb.co/wZwb8gCL/Whats-App-Image-2025-10-21-at-13-34-35-0976c6a2.jpg',
+      'https://i.ibb.co/3Yscy8Rd/Whats-App-Image-2025-10-21-at-13-34-35-523241c3.jpg',
+      'https://i.ibb.co/cK0XdCJc/Whats-App-Image-2025-10-21-at-13-34-35-cace941f.jpg',
+      'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
+      'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
+      'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
+      'https://i.ibb.co/WNBT0rTm/Whats-App-Image-2025-10-21-at-13-35-41-d72914c0.jpg',
+      'https://i.ibb.co/ynKKyB7t/Whats-App-Image-2025-10-21-at-13-34-35-0339566a.jpg'
+    ];
+    const loaded = [];
+    for (const url of partnerUrls) {
+      try {
+        const meta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx);
+        loaded.push(meta || null);
+      } catch (e) {
+        console.warn('Failed to load partner logo', e);
+        loaded.push(null);
+      }
+    }
+    return loaded;
+  }
+
+  _debugBox(x, y, w, h, fontSizePt, lines) {
+    if (!this.debug) return;
+    try {
+      const doc = this.doc;
+      doc.setDrawColor(255, 0, 0); 
+      doc.setLineWidth(0.3);
+      doc.rect(x, y, w, h);
+      doc.setFontSize(5); 
+      doc.setTextColor(255, 0, 0);
+      const overlay = `fs:${fontSizePt}pt ln:${lines ? lines.length : 0}`;
+      doc.text(overlay, x + 1, y + 1);
+      doc.setTextColor(0, 0, 0);
+    } catch(e) { /* ignore debug drawing errors */ }
+  }
+
+  async renderDocument() {
+    // Render the PDF sections in order
+    this.renderHeader();
+    this.renderTitle();
+    this.renderIntro();
+    this.renderTable();
+    this.renderTotals();
+    this.renderNotes();
+    this.renderSignature();
+    this.renderLogos();
+  }
+
+  async generate(proposalData, options = {}) {
+    try {
+      this.initializePDF(options);
+      await this.prepareData(proposalData);
+      this.colWidths = this.colPercentsToWidths();
+      await this.renderDocument();
+      const fileName = `${this.data.metadata.number || 'proposal'}-proposal.pdf`.replace(/[^^\w.-]/g, '_');
+      this.doc.save(fileName);
+      return fileName;
+    } catch (err) {
+      console.error('PDF generation failed', err);
+      throw new PDFGenerationError('Failed to generate PDF', err);
+    } finally {
+      this.imageLoader.clearCache();
+    }
   }
 }
 
