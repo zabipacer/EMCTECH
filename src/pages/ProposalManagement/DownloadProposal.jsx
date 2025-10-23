@@ -46,13 +46,12 @@ const PDF_CONFIG = {
     rowGap: 3               // spacing between rows
   },
   images: { 
-    maxDimensionPx: 1200,    // increased for better quality
-    maxDimensionMm: 120,     // increased
-    quality: 0.97,           // increased quality
+    maxDimensionPx: 1200,
+    maxDimensionMm: 120,
+    quality: 0.97,
     timeout: 10000,
-    // Logo dimensions
-    logoWidth: 45,           // slightly larger
-    logoHeight: 18
+    logoWidth: 60,      // Increased from 45
+    logoHeight: 25      // Increased from 18
   },
   layout: { reservedBottom: 50 }
 };
@@ -498,10 +497,21 @@ class EMCProposalPDF {
     if (sendingCompany === 'emctech') {
       try {
         this.logos.emc = await this.imageLoader.loadImage(
-          'https://i.ibb.co/Z1NxmgGT/Whats-App-Image-2025-10-20-at-19-18-39-a4aa3c8e.jpg',
+          'https://i.ibb.co/w9WQb0D/Whats-App-Image-2025-10-22-at-16-05-26-7a8ba761.jpg',
           PDF_CONFIG.images.maxDimensionPx
         );
-      } catch (e) { console.warn('EMC logo load failed', e); }
+      } catch (e) {
+        console.warn('EMC logo load failed', e);
+        // Fallback to original if needed
+        try {
+          this.logos.emc = await this.imageLoader.loadImage(
+            'https://i.ibb.co/Z1NxmgGT/Whats-App-Image-2025-10-20-at-19-18-39-a4aa3c8e.jpg',
+            PDF_CONFIG.images.maxDimensionPx
+          );
+        } catch (fallbackError) {
+          console.warn('EMC fallback logo also failed', fallbackError);
+        }
+      }
     } else if (sendingCompany === 'innovamechanics') {
       try {
         this.logos.innova = await this.imageLoader.loadImage(
@@ -546,10 +556,17 @@ class EMCProposalPDF {
       this.data = {
         company: {
           name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
-          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innovamechanics')),
-          address: this._toPlainString(companyData.address || proposal.address || 'Tashkent city, Yunusabad district, Bogishamot 21B'),
-          phone: this._toPlainString(companyData.phone || proposal.phone || '+998 90 122 55 18'),
-          email: this._toPlainString(companyData.email || proposal.email || 'info@emctech.uz'),
+          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
+          address: this._toPlainString(companyData.address || proposal.address || 
+            (sendingCompany === 'emctech' 
+              ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
+              : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, UK')),
+          phone: this._toPlainString(companyData.phone || proposal.phone || 
+            (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
+          email: this._toPlainString(companyData.email || proposal.email || 
+            (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
+          website: this._toPlainString(companyData.website || 
+            (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
           bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
           mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
           taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
@@ -609,10 +626,17 @@ class EMCProposalPDF {
       this.data = {
         company: {
           name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
-          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innovamechanics')),
-          address: this._toPlainString(companyData.address || proposal.address || 'Tashkent city, Yunusabad district, Bogishamot 21B'),
-          phone: this._toPlainString(companyData.phone || proposal.phone || '+998 90 122 55 18'),
-          email: this._toPlainString(companyData.email || proposal.email || 'info@emctech.uz'),
+          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
+          address: this._toPlainString(companyData.address || proposal.address || 
+            (sendingCompany === 'emctech' 
+              ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
+              : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, U')),
+          phone: this._toPlainString(companyData.phone || proposal.phone || 
+            (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
+          email: this._toPlainString(companyData.email || proposal.email || 
+            (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
+          website: this._toPlainString(companyData.website || 
+            (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
           bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
           mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
           taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
@@ -1317,8 +1341,8 @@ class EMCProposalPDF {
       'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
       'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
       'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
-      'https://i.ibb.co/WNBT0rTm/Whats-App-Image-2025-10-21-at-13-35-41-d72914c0.jpg',
-      'https://i.ibb.co/ynKKyB7t/Whats-App-Image-2025-10-21-at-13-34-35-0339566a.jpg'
+     
+      'https://i.ibb.co/0N2C13p/Whats-App-Image-2025-10-22-at-15-57-33-e016779a.jpg'
     ];
     const loaded = [];
     for (const url of partnerUrls) {
@@ -1362,17 +1386,24 @@ class EMCProposalPDF {
     const contactLine1 = `${this.data.company.address}`;
     const contactLine2 = `Phone: ${this.data.company.phone}`;
     const contactLine3 = `Bank: ${this.data.company.bankAccount}`;
-    const contactLine4 = `MFO: ${this.data.company.mfo} | ID: ${this.data.company.taxId}`;
+    const contactLine4 = this.data.company.website
+      ? `Website: ${this.data.company.website}`
+      : `Bank: ${this.data.company.bankAccount}`;
+    const contactLine5 = !this.data.company.website
+      ? `MFO: ${this.data.company.mfo} | ID: ${this.data.company.taxId}`
+      : '';
     const contactFit1 = this.measurer.fitFontSizeToBox(contactLine1, 'helvetica', 7, 6, companyInfoWidth, 8);
     const contactFit2 = this.measurer.fitFontSizeToBox(contactLine2, 'helvetica', 7, 6, companyInfoWidth, 8);
     const contactFit3 = this.measurer.fitFontSizeToBox(contactLine3, 'helvetica', 7, 6, companyInfoWidth, 8);
     const contactFit4 = this.measurer.fitFontSizeToBox(contactLine4, 'helvetica', 7, 6, companyInfoWidth, 8);
+    const contactFit5 = this.measurer.fitFontSizeToBox(contactLine5, 'helvetica', 7, 6, companyInfoWidth, 8);
 
     const totalTextHeight = companyNameFit.totalHeight + 
       contactFit1.totalHeight + 
       contactFit2.totalHeight + 
       contactFit3.totalHeight + 
       contactFit4.totalHeight + 
+      contactFit5.totalHeight + 
       (PDF_CONFIG.spacing.xs * 3);
 
     const headerHeight = Math.max(logoH + headerPadding * 2, totalTextHeight + headerPadding * 2);
@@ -1445,6 +1476,10 @@ class EMCProposalPDF {
     currentY += contactFit3.totalHeight;
     contactFit4.lines.forEach((line, i) => {
       doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit4.fontSize));
+    });
+    currentY += contactFit4.totalHeight;
+    contactFit5.lines.forEach((line, i) => {
+      doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit5.fontSize));
     });
 
     // --- Fix: Always render metadata BELOW company info if not enough space ---
@@ -1557,7 +1592,7 @@ renderIntro() {
   doc.setDrawColor(...PDF_CONFIG.colors.primary);
   doc.setLineWidth(0.5);
   doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3);
-  const textY = layout.getY() + boxPadding;
+   const textY = layout.getY() + boxPadding;
   let currentX = margin + boxPadding;
   let currentY = textY;
   for (let lineIndex = 0; lineIndex < introFit.lines.length; lineIndex++) {
@@ -1570,6 +1605,7 @@ renderIntro() {
         const beforeText = line.substring(0, companyIndex);
         if (beforeText) {
           doc.setFont('helvetica', 'normal');
+         
           doc.setFontSize(introFit.fontSize);
           doc.setTextColor(...PDF_CONFIG.colors.darkGray);
           doc.text(beforeText, currentX, currentY);
@@ -1611,8 +1647,8 @@ async loadPartnerLogos() {
       'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
       'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
       'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
-      'https://i.ibb.co/WNBT0rTm/Whats-App-Image-2025-10-21-at-13-35-41-d72914c0.jpg',
-      'https://i.ibb.co/ynKKyB7t/Whats-App-Image-2025-10-21-at-13-34-35-0339566a.jpg'
+    
+      'https://i.ibb.co/0N2C13p/Whats-App-Image-2025-10-22-at-15-57-33-e016779a.jpg'
     ];
     const loaded = [];
     for (const url of partnerUrls) {

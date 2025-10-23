@@ -35,14 +35,20 @@ const CreateProposalModal = ({
       signatory: {
         title: "General manager",
         name: "S.S. Abdushukurov"
+      },
+      defaultDeliveryTerms: {
+        paymentTerms: "50% prepayment",
+        deliveryTime: "6-12 weeks",
+        incoterms: "DDP Tashkent"
       }
     },
     innovamechanics: {
       name: "Innova Mechanics Ltd",
       shortName: "Innova Mechanics Ltd",
-      address: "Tashkent, Uzbekistan",
-      phone: "+998 90 123 45 67",
+      address: "Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, UK",
+      phone: "+44 1865 602161",
       email: "info@innovamechanics.com",
+      website: "www.innovamechanics.com",
       bankAccount: "To be provided",
       mfo: "To be provided",
       taxId: "To be provided",
@@ -50,6 +56,11 @@ const CreateProposalModal = ({
       signatory: {
         title: "Director",
         name: "Director Name"
+      },
+      defaultDeliveryTerms: {
+        paymentTerms: "50% prepayment",
+        deliveryTime: "6-12 weeks",
+        incoterms: "CIP Tashkent"
       }
     }
   };
@@ -73,11 +84,7 @@ const CreateProposalModal = ({
     templateType: "simple-commercial",
     documentNumber: "",
     companyDetails: companyConfigs.emctech,
-    deliveryTerms: {
-      paymentTerms: "50% prepayment",
-      deliveryTime: "6-12 weeks",
-      incoterms: "DDP"
-    },
+    deliveryTerms: companyConfigs.emctech.defaultDeliveryTerms,
     authorizedSignatory: companyConfigs.emctech.signatory
   });
   
@@ -140,11 +147,7 @@ const CreateProposalModal = ({
         templateType: "simple-commercial",
         documentNumber: "",
         companyDetails: companyConfigs.emctech,
-        deliveryTerms: {
-          paymentTerms: "50% prepayment",
-          deliveryTime: "6-12 weeks",
-          incoterms: "DDP"
-        },
+        deliveryTerms: companyConfigs.emctech.defaultDeliveryTerms,
         authorizedSignatory: companyConfigs.emctech.signatory
       });
       setSelectedProducts([]);
@@ -212,6 +215,7 @@ const CreateProposalModal = ({
       company: companyKey,
       companyName: selectedCompany.shortName,
       companyDetails: { ...selectedCompany },
+      deliveryTerms: selectedCompany.defaultDeliveryTerms,
       authorizedSignatory: selectedCompany.signatory
     }));
     showToast(`Switched to ${selectedCompany.shortName}`, 'success');
@@ -694,11 +698,7 @@ const CreateProposalModal = ({
         templateType: "simple-commercial",
         documentNumber: "",
         companyDetails: companyConfigs.emctech,
-        deliveryTerms: {
-          paymentTerms: "50% prepayment",
-          deliveryTime: "6-12 weeks",
-          incoterms: "DDP"
-        },
+        deliveryTerms: companyConfigs.emctech.defaultDeliveryTerms,
         authorizedSignatory: companyConfigs.emctech.signatory
       });
       setSelectedProducts([]);
@@ -1096,7 +1096,10 @@ const CreateProposalModal = ({
                           onChange={(e) => handleNestedChange('deliveryTerms', 'incoterms', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
                         >
+                          <option value="DDP Tashkent">DDP Tashkent</option>
+                          <option value="CIP Tashkent">CIP Tashkent</option>
                           <option value="DDP">DDP</option>
+                          <option value="CIP">CIP</option>
                           <option value="FOB">FOB</option>
                           <option value="CIF">CIF</option>
                           <option value="EXW">EXW</option>
@@ -1906,6 +1909,9 @@ const CreateProposalModal = ({
           </div>
         </div>
       </motion.div>
+
+
+
 
       {/* Enhanced Toast Notification System */}
       <AnimatePresence>
