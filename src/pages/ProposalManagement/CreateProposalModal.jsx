@@ -322,57 +322,157 @@ const CreateProposalModal = ({
     }));
   };
 
-  // Add product to proposal
-  const handleAddProduct = (product) => {
-    const quantity = parseInt(quantityInputs[product.id]) || 1;
-    const unitPrice = parseFloat(priceInputs[product.id]) || product.price || 0;
-    const discount = parseFloat(discountInputs[product.id]) || 0;
-    const taxable = taxToggle[product.id] !== false;
+  // Improved product to technical item conversion
+  const convertProductToTechnicalItem = (product, quantity = 1) => {
+    // Extract specifications from product data
+    const specifications = [];
     
-    // Validation
-    if (quantity <= 0) {
-      showToast("Quantity must be greater than 0", 'error');
-      return;
+    // Add specs if available
+    if (product.specs && Array.isArray(product.specs)) {
+      product.specs.forEach(spec => {
+        if (spec.key && spec.value) {
+          specifications.push(`${spec.key}: ${spec.value}`);
+        }
+      });
     }
-    if (unitPrice < 0) {
-      showToast("Unit price cannot be negative", 'error');
-      return;
+    
+    // Add description if no specs
+    if (specifications.length === 0 && product.seo?.description) {
+      specifications.push(product.seo.description);
     }
-    if (discount < 0 || discount > 100) {
-      showToast("Discount must be between 0% and 100%", 'error');
-      return;
+    
+    // Add category information
+    if (product.category && specifications.length === 0) {
+      specifications.push(`Category: ${product.category}`);
     }
 
-    const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
-    if (existingProductIndex >= 0) {
-      const updatedProducts = [...selectedProducts];
-      updatedProducts[existingProductIndex].quantity += quantity;
-      updatedProducts[existingProductIndex].lineTotal = calculateLineTotal(
-        updatedProducts[existingProductIndex].unitPrice,
-        updatedProducts[existingProductIndex].quantity,
-        updatedProducts[existingProductIndex].discount,
-        updatedProducts[existingProductIndex].taxable
-      );
-      setSelectedProducts(updatedProducts);
-      showToast(`Product already added. Quantity updated to ${updatedProducts[existingProductIndex].quantity}.`, 'info');
+    // Get manufacturer from company or use default
+    const manufacturer = product.company || "Various Manufacturers";
+    
+    // Generate a meaningful description
+    const description = (product.name?.EN || product.name || 'Unnamed Product').toUpperCase();
+    
+    // Create technical description from available data
+    const technicalDescription = product.seo?.description || 
+                                product.description || 
+                                product.name?.EN || 
+                                product.name || 
+                                '';
+
+    return {
+      id: `tech-${product.id}-${Date.now()}`,
+      itemNumber: rfqItems.length + 1,
+      description: description,
+      technicalDescription: technicalDescription,
+      manufacturer: manufacturer,
+      partNumber: product.sku || product.id?.toString() || "",
+      unit: product.unit || "each",
+      quantity: quantity,
+      unitPrice: product.price || 0,
+      willBeSupplied: manufacturer, // Default to manufacturer name
+      specifications: specifications.length > 0 ? specifications : [technicalDescription],
+      imageUrl: product.thumbnail || product.imageUrl || product.images?.[0] || "",
+      lineTotal: (product.price || 0) * quantity,
+      productId: product.id // Keep reference to original product
+    };
+  };
+
+  // Enhanced handleAddProduct to support both commercial and technical templates
+  const handleAddProduct = (product, quantity = 1, unitPrice = null, discount = 0, taxable = true) => {
+    if (usesTechnicalItems()) {
+      // For technical proposals, automatically convert product to technical item
+      const technicalItem = convertProductToTechnicalItem(product, quantity);
+      
+      // Check if this product is already added (by productId)
+      const existingItemIndex = rfqItems.findIndex(item => item.productId === product.id);
+      
+      if (existingItemIndex >= 0) {
+        // Update quantity if product already exists
+        const updatedItems = [...rfqItems];
+        updatedItems[existingItemIndex].quantity += quantity;
+        updatedItems[existingItemIndex].lineTotal = 
+          updatedItems[existingItemIndex].unitPrice * updatedItems[existingItemIndex].quantity;
+        setRfqItems(updatedItems);
+        showToast(`Product quantity updated to ${updatedItems[existingItemIndex].quantity}`, 'info');
+      } else {
+        // Add new technical item
+        setRfqItems(prev => [...prev, technicalItem]);
+        showToast(`Added ${product.name?.EN || product.name} to technical proposal`, 'success');
+      }
     } else {
-      setSelectedProducts(prev => [...prev, {
-        ...product,
-        imageUrl: product.imageUrl || product.thumbnail || '',
-        quantity,
-        unitPrice,
-        discount,
-        taxable,
-        lineTotal: calculateLineTotal(unitPrice, quantity, discount, taxable)
-      }]);
-      showToast(`Added ${product.name} to proposal`, 'success');
+      // Existing commercial product logic
+      const finalUnitPrice = unitPrice !== null ? unitPrice : (product.price || 0);
+      
+      // Validation
+      if (quantity <= 0) {
+        showToast("Quantity must be greater than 0", 'error');
+        return;
+      }
+      if (finalUnitPrice < 0) {
+        showToast("Unit price cannot be negative", 'error');
+        return;
+      }
+      if (discount < 0 || discount > 100) {
+        showToast("Discount must be between 0% and 100%", 'error');
+        return;
+      }
+
+      const existingProductIndex = selectedProducts.findIndex(p => p.id === product.id);
+      if (existingProductIndex >= 0) {
+        const updatedProducts = [...selectedProducts];
+        updatedProducts[existingProductIndex].quantity += quantity;
+        updatedProducts[existingProductIndex].lineTotal = calculateLineTotal(
+          updatedProducts[existingProductIndex].unitPrice,
+          updatedProducts[existingProductIndex].quantity,
+          updatedProducts[existingProductIndex].discount,
+          updatedProducts[existingProductIndex].taxable
+        );
+        setSelectedProducts(updatedProducts);
+        showToast(`Product already added. Quantity updated to ${updatedProducts[existingProductIndex].quantity}.`, 'info');
+      } else {
+        setSelectedProducts(prev => [...prev, {
+          ...product,
+          imageUrl: product.imageUrl || product.thumbnail || '',
+          quantity,
+          unitPrice: finalUnitPrice,
+          discount,
+          taxable,
+          lineTotal: calculateLineTotal(finalUnitPrice, quantity, discount, taxable)
+        }]);
+        showToast(`Added ${product.name} to proposal`, 'success');
+      }
     }
     
-    // Reset inputs for this product
-    setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
-    setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
-    setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
-    setTaxToggle(prev => ({ ...prev, [product.id]: true }));
+    // Reset inputs for this product (for commercial templates)
+    if (!usesTechnicalItems()) {
+      setQuantityInputs(prev => ({ ...prev, [product.id]: 1 }));
+      setPriceInputs(prev => ({ ...prev, [product.id]: "" }));
+      setDiscountInputs(prev => ({ ...prev, [product.id]: 0 }));
+      setTaxToggle(prev => ({ ...prev, [product.id]: true }));
+    }
+  };
+
+  // Bulk import functionality
+  const handleBulkImport = (products) => {
+    if (usesTechnicalItems()) {
+      const technicalItems = products.map(product => 
+        convertProductToTechnicalItem(product, 1)
+      );
+      setRfqItems(prev => [...prev, ...technicalItems]);
+      showToast(`Imported ${products.length} products as technical items`, 'success');
+    } else {
+      // Handle commercial bulk import
+      const commercialProducts = products.map(product => ({
+        ...product,
+        quantity: 1,
+        unitPrice: product.price || 0,
+        discount: 0,
+        taxable: true,
+        lineTotal: product.price || 0
+      }));
+      setSelectedProducts(prev => [...prev, ...commercialProducts]);
+      showToast(`Imported ${products.length} products`, 'success');
+    }
   };
 
   // Handle Technical RFQ item changes
@@ -1392,14 +1492,20 @@ const CreateProposalModal = ({
                       >
                         {collapsedSections.rfqItems ? <FaChevronDown /> : <FaChevronUp />}
                       </button>
+                      <button
+                        onClick={() => setIsProductModalOpen(true)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                      >
+                        <FaPlus /> Add from Products
+                      </button>
                     </div>
                   </div>
                   
                   {!collapsedSections.rfqItems && (
                     <>
-                      {/* Add New Technical Item Form */}
+                      {/* Manual Entry Form (Keep for custom items) */}
                       <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                        <h4 className="font-semibold text-gray-800 mb-3">Add Technical Item</h4>
+                        <h4 className="font-semibold text-gray-800 mb-3">Add Custom Technical Item</h4>
                         
                         <div className="grid grid-cols-2 gap-4 mb-4">
                           <div>
@@ -1466,8 +1572,8 @@ const CreateProposalModal = ({
                               className="w-full px-3 py-2 border border-gray-300 rounded-md"
                             >
                               <option value="each">each</option>
-                              <option value="set">set</option>
                               <option value="piece">piece</option>
+                              <option value="set">set</option>
                               <option value="meter">meter</option>
                               <option value="kg">kg</option>
                               <option value="liter">liter</option>
@@ -1580,7 +1686,7 @@ const CreateProposalModal = ({
                           className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
                           disabled={!currentRfqItem.description}
                         >
-                          Add Technical Item
+                          Add Custom Item
                         </button>
                       </div>
 
@@ -1589,7 +1695,7 @@ const CreateProposalModal = ({
                         <div className="text-center py-8 text-gray-500">
                           <FaFileInvoice className="text-4xl mx-auto mb-3 text-gray-300" />
                           <p>No technical items added yet.</p>
-                          <p className="text-sm">Use the form above to add technical items</p>
+                          <p className="text-sm">Use the form above to add custom items or click "Add from Products"</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -1612,8 +1718,13 @@ const CreateProposalModal = ({
                                     <h5 className="font-semibold text-gray-900">{item.description}</h5>
                                     <p className="text-sm text-gray-600">{item.technicalDescription}</p>
                                     <p className="text-sm font-medium text-green-600">
-                                      {formatCurrency(item.unitPrice)} × {item.quantity} = {formatCurrency(item.lineTotal)}
+                                      {formatCurrency(item.unitPrice)} × {item.quantity} {item.unit} = {formatCurrency(item.lineTotal)}
                                     </p>
+                                    {item.productId && (
+                                      <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                                        ✓ Imported from Product Catalog
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <button
@@ -1910,9 +2021,6 @@ const CreateProposalModal = ({
         </div>
       </motion.div>
 
-
-
-
       {/* Enhanced Toast Notification System */}
       <AnimatePresence>
         {toast && (
@@ -1967,6 +2075,7 @@ const CreateProposalModal = ({
             onAddProduct={handleAddProduct}
             isLoading={isLoading}
             selectedProductsCount={selectedProducts.length}
+            templateType={proposal.templateType} // Pass template type to modal
           />
         )}
       </AnimatePresence>

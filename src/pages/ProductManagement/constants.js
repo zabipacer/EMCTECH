@@ -75,7 +75,6 @@ export const STORAGE_PATHS = {
   PRODUCT_IMAGES: 'product-images'
 };
 
-export const uid = (prefix = "") => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export const formatCurrency = (v) => (typeof v === "number" ? `$${v.toLocaleString()}` : v);
 
@@ -84,19 +83,36 @@ export const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString();
 };
 
-export function toCSV(rows) {
-  if (rows.length === 0) return "";
-  const keys = Object.keys(rows[0]);
-  const lines = [keys.join(",")];
-  for (const row of rows) {
-    const values = keys.map(key => {
-      const value = row[key];
-      if (typeof value === "string") {
-        return `"${value.replace(/"/g, '""')}"`;
+
+
+export const toCSV = (data) => {
+  if (!data || data.length === 0) return '';
+  
+  const headers = Object.keys(data[0]);
+  const csvRows = [];
+  
+  // Add header row
+  csvRows.push(headers.join(','));
+  
+  // Add data rows
+  for (const row of data) {
+    const values = headers.map(header => {
+      const value = row[header];
+      // Handle values that might contain commas or quotes
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
       }
-      return value;
+      return stringValue;
     });
-    lines.push(values.join(","));
+    csvRows.push(values.join(','));
   }
-  return lines.join("\n");
-}
+  
+  return csvRows.join('\n');
+};
+
+// Unique ID generator
+export const uid = (prefix = '') => {
+  return prefix + Date.now().toString(36) + Math.random().toString(36).substr(2);
+};

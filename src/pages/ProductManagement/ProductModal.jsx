@@ -238,8 +238,8 @@ function ProductModal({ product: initial, onClose, onSave, onUploadImage }) {
                 />
               </div>
 
-              {/* Category & Company */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Category, Company & Unit */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <input
@@ -257,6 +257,24 @@ function ProductModal({ product: initial, onClose, onSave, onUploadImage }) {
                     value={product.company || ""}
                     onChange={(e) => setField("company", e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
+                  <select
+                    value={product.unit || "each"}
+                    onChange={(e) => setField("unit", e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="each">each</option>
+                    <option value="piece">piece</option>
+                    <option value="set">set</option>
+                    <option value="meter">meter</option>
+                    <option value="kg">kg</option>
+                    <option value="liter">liter</option>
+                    <option value="unit">unit</option>
+                    <option value="pair">pair</option>
+                    <option value="box">box</option>
+                  </select>
                 </div>
               </div>
 

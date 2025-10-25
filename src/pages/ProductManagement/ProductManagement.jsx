@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
-import { FaExclamationTriangle, FaImage, FaPlus } from "react-icons/fa";
+import { FaFileImport, FaFileExport, FaPlus } from "react-icons/fa";
 
 import { useProducts, useProductFilters } from './hooks';
 import { uid, toCSV } from './constants';
@@ -18,43 +18,72 @@ import ConfirmDialog from './ConfimDialog';
 import Toast from './Toast';
 import ErrorComponent from './ErrorComponent';
 
-// Field mapping for flexible CSV import
+// Enhanced field mapping for flexible CSV import
 const FIELD_MAP = {
-  nameEN: ["EN", "Product name (EN)", "Name", "Product Name", "ProductName", "Name EN", "Product Name EN"],
-  nameRU: ["RU", "Product name (RU)", "Name RU", "Product Name RU"],
-  nameUZ: ["UZ", "Product name (UZ)", "Name UZ", "Product Name UZ"],
-  sku: ["SKU", "Product SKU", "Sku", "Product Code", "Code"],
-  price: ["Price ($)", "Price", "Unit Price", "Amount", "Price USD", "Cost USD"],
-  cost: ["Cost ($)", "Cost", "Unit Cost", "Purchase Price"],
-  stock: ["Stock Quantity", "Stock", "Quantity", "Qty", "Inventory"],
-  lowStockThreshold: ["Low Stock Threshold", "Low Stock", "LowStock", "Min Stock", "Minimum Stock"],
-  category: ["Category", "Product category", "Product Category", "Category Name"],
-  status: ["Status", "Product Status", "State"],
-  company: ["Company/Brand", "Company", "Brand", "Manufacturer", "Supplier"],
-  description: ["Description", "Product Description", "Desc", "Product Desc"],
-  slug: ["Slug", "URL Slug", "Product URL"],
-  metaTitle: ["Meta Title", "MetaTitle", "SEO Title", "Title"],
-  metaDescription: ["Meta Description", "MetaDescription", "SEO Description", "SEO Desc"]
+  name: ["name", "product name", "product_name", "productname", "title", "product", "item"],
+  sku: ["sku", "product sku", "product_sku", "productsku", "code", "product code", "product_code", "item number", "item_number"],
+  price: ["price", "price ($)", "unit price", "unit_price", "amount", "price usd", "cost usd", "retail price"],
+  cost: ["cost", "cost ($)", "unit cost", "unit_cost", "purchase price", "purchase_price", "wholesale price"],
+  quantity: ["quantity", "stock", "stock quantity", "stock_quantity", "qty", "inventory", "stock level"],
+  description: ["description", "product description", "product_description", "desc", "product desc"],
+  category: ["category", "product category", "product_category", "cat", "category name"],
+  status: ["status", "product status", "product_status", "state", "active"],
+  vendor: ["vendor", "company", "company/brand", "brand", "manufacturer", "supplier"],
+  imageUrl: ["imageurl", "image_url", "image", "thumbnail", "picture", "photo"],
+  tags: ["tags", "tag", "keywords", "product tags"],
+  taxable: ["taxable", "tax", "tax required", "tax_required"],
+  weight: ["weight", "product weight", "weight (kg)", "shipping weight"],
+  dimensions: ["dimensions", "size", "measurements", "product dimensions"]
 };
 
-// Header normalization function
+// Enhanced header normalization function
 function normalizeHeaders(raw) {
   const normalized = {};
+  
   for (const [key, value] of Object.entries(raw)) {
+    if (value === undefined || value === null || value === '') continue;
+    
+    const cleanKey = key.toString().trim().toLowerCase();
     let found = false;
+    
     for (const [field, aliases] of Object.entries(FIELD_MAP)) {
-      if (aliases.some(alias => alias.toLowerCase() === key.trim().toLowerCase())) {
+      if (aliases.some(alias => alias.toLowerCase() === cleanKey)) {
         normalized[field] = value;
         found = true;
         break;
       }
     }
+    
     if (!found) {
-      normalized[key] = value; // fallback for unmapped fields
+      normalized[cleanKey] = value;
     }
   }
+  
   return normalized;
 }
+
+// Enhanced product validation
+const validateProduct = (product) => {
+  const errors = [];
+  
+  if (!product.name || product.name.toString().trim() === '') {
+    errors.push('Product name is required');
+  }
+  
+  if (!product.sku || product.sku.toString().trim() === '') {
+    errors.push('SKU is required');
+  }
+  
+  if (product.price && isNaN(parseFloat(product.price))) {
+    errors.push('Invalid price format');
+  }
+  
+  if (product.quantity && isNaN(parseInt(product.quantity))) {
+    errors.push('Invalid quantity format');
+  }
+  
+  return errors;
+};
 
 export default function ProductManagement() {
   const { products, loading, error, saveProduct, deleteProducts } = useProducts();
@@ -82,13 +111,6 @@ export default function ProductManagement() {
   const pageData = filteredAndSorted.slice((page - 1) * perPage, page * perPage);
 
   /* ------------------ Selection helpers ------------------ */
-
-  // Add debug logging
-  useEffect(() => {
-    console.log('Products state:', products);
-    console.log('Loading state:', loading);
-    console.log('Error state:', error);
-  }, [products, loading, error]);
 
   useEffect(() => {
     if (selectAllPage) {
@@ -148,7 +170,6 @@ export default function ProductManagement() {
     updatedAt: new Date().toISOString()
   });
 
-  // Update the handleSaveProduct function
   const handleSaveProduct = useCallback(async (product, imageFile = null) => {
     try {
       await saveProduct(product, imageFile);
@@ -159,7 +180,6 @@ export default function ProductManagement() {
     }
   }, [saveProduct, showToast]);
 
-  // Update the handleDuplicate function
   const handleDuplicate = useCallback(async (product) => {
     const duplicate = {
       ...product,
@@ -170,7 +190,6 @@ export default function ProductManagement() {
       updatedAt: new Date().toISOString()
     };
     
-    // Remove the thumbnail to avoid sharing the same image
     delete duplicate.thumbnail;
     
     try {
@@ -181,13 +200,11 @@ export default function ProductManagement() {
     }
   }, [saveProduct, showToast]);
 
-  // Update bulk status change
   const handleBulkStatusChange = useCallback(async (status) => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return showToast("Select products first", "error");
     
     try {
-      // Update each product individually
       await Promise.all(
         ids.map(async (id) => {
           const product = products.find(p => p.id === id);
@@ -208,164 +225,293 @@ export default function ProductManagement() {
     }
   }, [selectedIds, products, saveProduct, clearSelection, showToast]);
 
-  const handleExportCSV = useCallback((all = false) => {
-    const rows = (all ? filteredAndSorted : filteredAndSorted.filter((p) => selectedIds.has(p.id))).map((p) => ({
-      id: p.id,
-      name: p.name?.EN || "",
-      sku: p.sku || "",
-      price: p.price || 0,
-      cost: p.cost || 0,
-      stock: p.stock || 0,
-      status: p.status || "",
-      category: p.category || "",
-      company: p.company || ""
-    }));
+  // Enhanced export function with XLS support
+  const handleExport = useCallback(async (all = false, format = 'csv') => {
+    const rows = (all ? filteredAndSorted : filteredAndSorted.filter((p) => selectedIds.has(p.id)));
     
     if (rows.length === 0) return showToast("No products to export", "error");
     
-    const csv = toCSV(rows);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `products-export-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${rows.length} products to CSV`, "success");
+    const exportData = rows.map((p) => ({
+      'Product Name (EN)': p.name?.EN || "",
+      'Product Name (RU)': p.name?.RU || "",
+      'Product Name (UZ)': p.name?.UZ || "",
+      'SKU': p.sku || "",
+      'Price ($)': p.price || 0,
+      'Cost ($)': p.cost || 0,
+      'Stock Quantity': p.stock || 0,
+      'Low Stock Threshold': p.lowStockThreshold || 5,
+      'Category': p.category || "",
+      'Status': p.status || "",
+      'Company/Brand': p.company || "",
+      'Description': p.description || "",
+      'Slug': p.seo?.slug || "",
+      'Meta Title': p.seo?.title || "",
+      'Meta Description': p.seo?.description || ""
+    }));
+    
+    if (format === 'csv') {
+      const csv = toCSV(exportData);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `products-export-${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${rows.length} products to CSV`, "success");
+    } else if (format === 'xlsx') {
+      try {
+        const XLSX = await import('xlsx');
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
+        XLSX.writeFile(workbook, `products-export-${Date.now()}.xlsx`);
+        showToast(`Exported ${rows.length} products to XLSX`, "success");
+      } catch (err) {
+        console.error('XLSX export error:', err);
+        showToast("Failed to export XLSX file", "error");
+      }
+    }
   }, [filteredAndSorted, selectedIds, showToast]);
 
- const handleDeleteSelected = useCallback(() => {
-  const ids = Array.from(selectedIds);
-  if (ids.length === 0) {
-    showToast("Select products first", "error");
-    return;
+  const handleDeleteSelected = useCallback(() => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      showToast("Select products first", "error");
+      return;
+    }
+    
+    setConfirm({
+      title: `Delete ${ids.length} product${ids.length > 1 ? 's' : ''}?`,
+      message: "This action cannot be undone. The products will be permanently removed.",
+      onConfirm: async () => {
+        try {
+          await deleteProducts(ids);
+          clearSelection();
+          setConfirm(null);
+          showToast(`Deleted ${ids.length} product${ids.length > 1 ? 's' : ''}`, "success");
+        } catch (err) {
+          console.error('Delete selected error:', err);
+          setConfirm(null);
+          showToast(`Failed to delete products: ${err.message}`, "error");
+        }
+      },
+      onCancel: () => setConfirm(null)
+    });
+  }, [selectedIds, deleteProducts, clearSelection, showToast]);
+
+  const handleDeleteProduct = useCallback((product) => {
+    setConfirm({
+      title: "Delete Product",
+      message: `Are you sure you want to delete "${product.name?.EN || product.sku}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await deleteProducts([product.id]);
+          setConfirm(null);
+          showToast("Product deleted successfully", "success");
+        } catch (err) {
+          console.error('Delete single product error:', err);
+          setConfirm(null);
+          showToast(`Failed to delete product: ${err.message}`, "error");
+        }
+      },
+      onCancel: () => setConfirm(null)
+    });
+  }, [deleteProducts, showToast]);
+
+ // Enhanced import handler with intelligent field detection and auto-generation
+// Enhanced import handler for commercial offers and standard products
+const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) => {
+  let imported = 0;
+  let failed = 0;
+  const errors = [];
+
+  // Helper function to extract meaningful product name
+  const extractProductName = (rawData) => {
+    if (rawData.name) return rawData.name;
+    if (rawData.description) return rawData.description;
+    if (rawData.product) return rawData.product;
+    if (rawData.item) return rawData.item;
+    
+    // Try to find any string field that could be a name
+    for (const [key, value] of Object.entries(rawData)) {
+      if (typeof value === 'string' && value.length > 5 && value.length < 100) {
+        const lowerKey = key.toLowerCase();
+        if (!lowerKey.includes('price') && !lowerKey.includes('quantity') && 
+            !lowerKey.includes('sku') && !lowerKey.includes('code')) {
+          return value;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Helper function to extract numeric values
+  const extractNumericValue = (value) => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    
+    const str = String(value).replace(/[^\d.,]/g, '');
+    const num = parseFloat(str.replace(',', ''));
+    return isNaN(num) ? 0 : num;
+  };
+
+  for (const [index, raw] of productsFromFile.entries()) {
+    try {
+      // Skip empty rows
+      const isEmptyRow = Object.values(raw).every(value => 
+        value === undefined || value === null || value === '' || 
+        (typeof value === 'string' && value.trim() === '')
+      );
+      
+      if (isEmptyRow) {
+        console.log(`Skipping empty row ${index + 1}`);
+        continue;
+      }
+
+      console.log(`Processing row ${index + 1}:`, raw);
+
+      // Extract product information with flexible field detection
+      const productName = extractProductName(raw);
+      let productSku = raw.sku || raw.code || raw.id || raw.product-code;
+      
+      // Auto-generate name and SKU if not found
+      const finalName = productName || `Commercial Item ${index + 1}`;
+      
+      if (!productSku) {
+        const cleanName = finalName.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
+        productSku = `IMP-${cleanName}-${index + 1}`;
+      }
+
+      // Extract pricing and quantity information
+      let price = 0;
+      let cost = 0;
+      let quantity = 1;
+
+      // Try different field names for price
+      const priceFields = ['price', 'unit price', 'price per unit', 'cost', 'amount', 'rate'];
+      for (const field of priceFields) {
+        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
+          price = extractNumericValue(raw[field]);
+          if (price > 0) break;
+        }
+      }
+
+      // Try different field names for quantity
+      const quantityFields = ['quantity', 'qty', 'number of units', 'no. of unit', 'count', 'units'];
+      for (const field of quantityFields) {
+        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
+          quantity = extractNumericValue(raw[field]);
+          if (quantity > 0) break;
+        }
+      }
+
+      // Try different field names for cost
+      const costFields = ['cost', 'unit cost', 'purchase price', 'wholesale'];
+      for (const field of costFields) {
+        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
+          cost = extractNumericValue(raw[field]);
+          if (cost > 0) break;
+        }
+      }
+
+      // If cost not found but price exists, set cost as 80% of price (typical margin)
+      if (cost === 0 && price > 0) {
+        cost = price * 0.8;
+      }
+
+      // Extract description
+      let description = raw.description || raw.details || raw.technical || raw.notes || finalName;
+
+      // Extract category from description or use default
+      let category = raw.category || 'Commercial Products';
+      if (description.toLowerCase().includes('lock')) category = 'Safety Locks';
+      if (description.toLowerCase().includes('chain')) category = 'Safety Chains';
+      if (description.toLowerCase().includes('box')) category = 'Storage Solutions';
+      if (description.toLowerCase().includes('cabinet')) category = 'Storage Solutions';
+
+      // Create the final product object
+      const product = {
+        id: uid("p-"),
+        name: { 
+          EN: finalName, 
+          RU: "", 
+          UZ: "" 
+        },
+        sku: productSku.toString().trim(),
+        price: price,
+        cost: cost,
+        stock: quantity,
+        lowStockThreshold: 5,
+        category: category,
+        status: "draft",
+        company: "Teknik Group",
+        description: description,
+        thumbnail: "",
+        seo: {
+          slug: "",
+          title: "",
+          description: ""
+        },
+        specs: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Final validation
+      if (!product.name.EN || product.name.EN.trim() === '') {
+        throw new Error("Could not determine product name");
+      }
+
+      if (product.price < 0) {
+        product.price = 0;
+      }
+
+      if (product.stock < 0) {
+        product.stock = 0;
+      }
+
+      console.log('Saving product:', product);
+      await saveProduct(product);
+      imported++;
+      
+    } catch (e) {
+      failed++;
+      const errorMsg = `Row ${index + 1}: ${e.message}`;
+      errors.push(errorMsg);
+      console.error('Import error for row:', raw, e);
+    }
+  }
+
+  // Return results object
+  const results = {
+    imported,
+    failed,
+    total: imported + failed,
+    errors: errors.length > 0 ? errors : null
+  };
+
+  // Show toast notification
+  let toastMessage = `Imported ${imported} products`;
+  let toastType = "success";
+  
+  if (failed > 0) {
+    toastMessage += `, ${failed} failed`;
+    toastType = "warning";
   }
   
-  setConfirm({
-    title: `Delete ${ids.length} product${ids.length > 1 ? 's' : ''}?`,
-    message: "This action cannot be undone. The products will be permanently removed.",
-    onConfirm: async () => {
-      try {
-        await deleteProducts(ids);
-        clearSelection();
-        setConfirm(null);
-        showToast(`Deleted ${ids.length} product${ids.length > 1 ? 's' : ''}`, "success");
-      } catch (err) {
-        console.error('Delete selected error:', err);
-        setConfirm(null);
-        showToast(`Failed to delete products: ${err.message}`, "error");
-      }
-    },
-    onCancel: () => setConfirm(null)
-  });
-}, [selectedIds, deleteProducts, clearSelection, showToast]);
+  if (imported === 0 && failed === 0) {
+    toastMessage = "No valid products found to import";
+    toastType = "warning";
+  }
+  
+  showToast(toastMessage, toastType);
 
-  // Add this useEffect to monitor delete operations
-  useEffect(() => {
-    if (error) {
-      console.log('🔄 Current error state:', error);
-      console.log('📊 Products count during error:', products.length);
-      console.log('⏳ Loading state during error:', loading);
-    }
-  }, [error, products, loading]);
-
- // In ProductManagement component - fix handleDeleteProduct
-const handleDeleteProduct = useCallback((product) => {
-  setConfirm({
-    title: "Delete Product",
-    message: `Are you sure you want to delete "${product.name?.EN || product.sku}"? This action cannot be undone.`,
-    onConfirm: async () => {
-      try {
-        await deleteProducts([product.id]);
-        setConfirm(null);
-        showToast("Product deleted successfully", "success");
-      } catch (err) {
-        console.error('Delete single product error:', err);
-        setConfirm(null);
-        showToast(`Failed to delete product: ${err.message}`, "error");
-      }
-    },
-    onCancel: () => setConfirm(null)
-  });
-}, [deleteProducts, showToast]);
-
-// Fix handleDeleteSelected
-
-
-  // Enhanced import handler with flexible mapping
-  const handleImport = useCallback(async (productsFromCsv) => {
-    let imported = 0;
-    let failed = 0;
-    const errors = [];
-
-    for (const raw of productsFromCsv) {
-      try {
-        // Normalize CSV headers to internal field names
-        const norm = normalizeHeaders(raw);
-        
-        // Create product with normalized fields
-        const product = {
-          name: { 
-            EN: norm.nameEN || norm.name || "", 
-            RU: norm.nameRU || "", 
-            UZ: norm.nameUZ || "" 
-          },
-          sku: norm.sku || "",
-          price: parseFloat(norm.price) || 0,
-          cost: parseFloat(norm.cost) || 0,
-          stock: parseInt(norm.stock) || 0,
-          lowStockThreshold: parseInt(norm.lowStockThreshold) || 5,
-          category: norm.category || "",
-          status: (norm.status || "draft").toLowerCase(),
-          company: norm.company || "Innova",
-          description: norm.description || "",
-          seo: {
-            slug: norm.slug || "",
-            title: norm.metaTitle || "",
-            description: norm.metaDescription || ""
-          },
-          specs: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        // Validate required fields
-        if (!product.name.EN && !product.sku) {
-          throw new Error("Missing required fields: name or SKU");
-        }
-
-        await saveProduct(product);
-        imported++;
-      } catch (e) {
-        failed++;
-        errors.push(`Row ${imported + failed + 1}: ${e.message}`);
-        console.error('Import error for row:', raw, e);
-      }
-    }
-
-    // Show comprehensive result
-    let toastMessage = `Imported ${imported} products`;
-    let toastType = "success";
-    
-    if (failed > 0) {
-      toastMessage += `, ${failed} failed`;
-      toastType = "error";
-      
-      // Log detailed errors for debugging
-      console.error('Import errors:', errors);
-      
-      // Show first few errors in toast if needed
-      if (errors.length > 0) {
-        toastMessage += `. First error: ${errors[0]}`;
-      }
-    }
-    
-    showToast(toastMessage, toastType);
-    setImportOpen(false);
-  }, [saveProduct, showToast]);
-
+  return results;
+}, [saveProduct, showToast]);
   /* ------------------ UI Render Helpers ------------------ */
 
   const smallStats = useMemo(() => ({
@@ -385,7 +531,7 @@ const handleDeleteProduct = useCallback((product) => {
     setPage(1);
   }, [updateFilter]);
 
-  // Add this useEffect to log state changes
+  // Debug logging
   useEffect(() => {
     console.log('🔍 ProductManagement State:', {
       productsCount: products.length,
@@ -393,35 +539,9 @@ const handleDeleteProduct = useCallback((product) => {
       error,
       selectedIds: Array.from(selectedIds),
       viewMode,
-      page,
-      productModalOpen,
-      importOpen
+      page
     });
-  }, [products, loading, error, selectedIds, viewMode, page, productModalOpen, importOpen]);
-
-
-
-// Add this to your ProductManagement component
-useEffect(() => {
-  if (error) {
-    console.log('🔄 Current error state:', error);
-    console.log('📊 Products count:', products.length);
-    console.log('⏳ Loading state:', loading);
-  }
-}, [error, products, loading]);
-
-// Add this to monitor delete operations specifically
-useEffect(() => {
-  console.log('🔍 Delete operation state:', {
-    selectedIds: Array.from(selectedIds),
-    productsCount: products.length,
-    loading
-  });
-}, [selectedIds, products, loading]);
-
-
-
-  /* ------------------ Render ------------------ */
+  }, [products, loading, error, selectedIds, viewMode, page]);
 
   if (error) {
     console.error('❌ Main component error:', error);
@@ -433,7 +553,8 @@ useEffect(() => {
       {/* Header */}
       <Header 
         onImportOpen={() => setImportOpen(true)}
-        onExportAll={() => handleExportCSV(true)}
+        onExportCSV={() => handleExport(true, 'csv')}
+        onExportXLS={() => handleExport(true, 'xlsx')}
         onAddProduct={() => openProduct(null)}
         filteredCount={filteredAndSorted.length}
         totalCount={products.length}
@@ -459,7 +580,7 @@ useEffect(() => {
         <BulkActions 
           selectedCount={selectedIds.size}
           onBulkStatusChange={handleBulkStatusChange}
-          onExportSelected={() => handleExportCSV(false)}
+          onExportSelected={() => handleExport(false, 'csv')}
           onDeleteSelected={handleDeleteSelected}
           onClearSelection={clearSelection}
         />
@@ -510,12 +631,12 @@ useEffect(() => {
 
       {/* Import Modal */}
       <AnimatePresence>
-        {importOpen && (
-          <ImportModal
-            onClose={() => setImportOpen(false)}
-            onImport={handleImport}
-          />
-        )}
+       {importOpen && (
+  <ImportModal
+    onClose={() => setImportOpen(false)}
+    onImport={handleImport}
+  />
+)}
       </AnimatePresence>
 
       {/* Product Modal */}

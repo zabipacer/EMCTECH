@@ -1,7 +1,7 @@
 import React from "react";
-import { FaFileImport, FaFileExport, FaPlus } from "react-icons/fa";
+import { FaFileImport, FaFileExport, FaFileExcel, FaPlus } from "react-icons/fa";
 
-const Header = ({ onImportOpen, onExportAll, onAddProduct, filteredCount, totalCount }) => {
+const Header = ({ onImportOpen, onExportCSV, onExportXLS, onAddProduct, filteredCount, totalCount }) => {
   return (
     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
       <div className="flex-1">
@@ -21,14 +21,21 @@ const Header = ({ onImportOpen, onExportAll, onAddProduct, filteredCount, totalC
           onClick={onImportOpen} 
           className="bg-white border border-gray-300 px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-shadow inline-flex items-center gap-2"
         >
-          <FaFileImport /> Import CSV
+          <FaFileImport /> Import CSV/XLS
         </button>
 
         <button 
-          onClick={onExportAll} 
+          onClick={onExportCSV} 
           className="bg-white border border-gray-300 px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-shadow inline-flex items-center gap-2"
         >
-          <FaFileExport /> Export All
+          <FaFileExport /> Export CSV
+        </button>
+
+        <button 
+          onClick={onExportXLS} 
+          className="bg-white border border-gray-300 px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-shadow inline-flex items-center gap-2"
+        >
+          <FaFileExcel /> Export XLS
         </button>
 
         <button 

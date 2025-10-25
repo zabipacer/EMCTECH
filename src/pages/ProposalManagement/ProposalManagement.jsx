@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaFilePdf, FaSpinner, FaInbox, FaExclamationTriangle } from 'react-icons/fa';
+import { FaFilePdf, FaSpinner, FaInbox, FaExclamationTriangle, FaFileExcel, FaFileCsv } from 'react-icons/fa';
 
 // Hooks
 import { useProposals, useClients, useProducts } from './hooks/useFirebase';
@@ -24,6 +24,9 @@ import DebugInfo from './DebugInfo';
 // Utility for PDF download
 import { downloadProposalPdf } from './DownloadProposal';
 
+// Import utilities
+import { importProductsFromCSV, importProductsFromXLSX } from './Importutils.js';
+
 const ProposalManagement = ({ user }) => {
   const [isLoading, setIsLoading] = useState(false);
   // Error handling state
@@ -34,7 +37,7 @@ const ProposalManagement = ({ user }) => {
   });
 
   // load products for product selection modal (falls back to all products if user missing)
-  const { products: availableProducts, loading: productsLoading, error: productsError } = useProducts(user);
+  const { products: availableProducts, loading: productsLoading, error: productsError, addProduct, bulkAddProducts } = useProducts(user);
 
   // Firebase hooks with error handling
   const { 
@@ -96,9 +99,137 @@ const ProposalManagement = ({ user }) => {
   const [toast, setToast] = useState(null);
   const [quickClientModalOpen, setQuickClientModalOpen] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  
+  // Import modal state
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importErrors, setImportErrors] = useState([]);
+  const [importSuccessCount, setImportSuccessCount] = useState(0);
 
   // Combined loading state
   const loading = proposalsLoading || clientsLoading || productsLoading;
+
+  /* ---------------------- Import Products Handlers ---------------------- */
+  const handleImportProducts = async (file, fileType) => {
+    try {
+      setImportLoading(true);
+      setImportErrors([]);
+      setImportSuccessCount(0);
+
+      let importedProducts;
+      
+      if (fileType === 'csv') {
+        importedProducts = await importProductsFromCSV(file);
+      } else if (fileType === 'xlsx') {
+        importedProducts = await importProductsFromXLSX(file);
+      } else {
+        throw new Error('Unsupported file type');
+      }
+
+      // Validate imported products
+      const validProducts = [];
+      const errors = [];
+
+      importedProducts.forEach((product, index) => {
+        try {
+          // Required fields validation
+          if (!product.name && !product.sku) {
+            throw new Error('Missing required fields: name or SKU');
+          }
+
+          // Ensure required fields with defaults
+          const validatedProduct = {
+            name: product.name || `Imported Product ${index + 1}`,
+            sku: product.sku || `IMP-${Date.now()}-${index}`,
+            description: product.description || '',
+            price: parseFloat(product.price) || 0,
+            cost: parseFloat(product.cost) || 0,
+            quantity: parseInt(product.quantity) || 0,
+            category: product.category || 'Uncategorized',
+            taxable: Boolean(product.taxable),
+            unit: product.unit || 'pcs',
+            status: product.status || 'active',
+            createdAt: product.createdAt || new Date(),
+            updatedAt: new Date(),
+            // Handle optional fields
+            imageUrl: product.imageUrl || product.image || product.thumbnail || '',
+            tags: Array.isArray(product.tags) ? product.tags : 
+                 typeof product.tags === 'string' ? product.tags.split(',').map(tag => tag.trim()) : [],
+            specifications: product.specifications || {},
+            vendor: product.vendor || '',
+            weight: parseFloat(product.weight) || 0,
+            dimensions: product.dimensions || ''
+          };
+
+          // Validate numeric fields
+          if (isNaN(validatedProduct.price) || validatedProduct.price < 0) {
+            throw new Error('Invalid price');
+          }
+          if (isNaN(validatedProduct.quantity) || validatedProduct.quantity < 0) {
+            throw new Error('Invalid quantity');
+          }
+
+          validProducts.push(validatedProduct);
+        } catch (error) {
+          errors.push({
+            row: index + 1,
+            product: product,
+            error: error.message
+          });
+          console.error(`Import error for row:`, product, error);
+        }
+      });
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        showToast(`Import completed with ${errors.length} errors`, 'warning');
+      }
+
+      // Add valid products to database
+      if (validProducts.length > 0) {
+        try {
+          await bulkAddProducts(validProducts);
+          setImportSuccessCount(validProducts.length);
+          showToast(`Successfully imported ${validProducts.length} products`, 'success');
+          setImportModalOpen(false);
+        } catch (error) {
+          console.error('Error saving products to database:', error);
+          showToast(`Error saving products: ${error.message}`, 'error');
+        }
+      }
+
+    } catch (error) {
+      console.error('Error importing products:', error);
+      showToast(`Import failed: ${error.message}`, 'error');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleFileSelect = (event, fileType) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (fileType === 'csv' && !file.name.toLowerCase().endsWith('.csv')) {
+      showToast('Please select a CSV file', 'error');
+      return;
+    }
+
+    if (fileType === 'xlsx' && !file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+      showToast('Please select an Excel file (XLSX or XLS)', 'error');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size must be less than 10MB', 'error');
+      return;
+    }
+
+    handleImportProducts(file, fileType);
+    event.target.value = ''; // Reset file input
+  };
 
   /* ---------------------- Filtering & Sorting ---------------------- */
   const filteredProposals = useMemo(() => {
@@ -141,7 +272,6 @@ const ProposalManagement = ({ user }) => {
   );
 
   /* ---------------------- Selection Helpers ----------------------- */
-  // Fix: Handle select all for current page
   const handleSelectAllPage = (checked) => {
     setSelectAllPage(checked);
     if (checked) {
@@ -168,7 +298,7 @@ const ProposalManagement = ({ user }) => {
     });
   };
 
-  // Fix: Reset selectAllPage when data changes
+  // Reset selectAllPage when data changes
   useEffect(() => {
     setSelectAllPage(false);
   }, [currentPageData]);
@@ -402,7 +532,7 @@ const ProposalManagement = ({ user }) => {
       setIsLoading(true);
       await addProposal(proposalData);
       setToast({ message: 'Proposal created successfully!', type: 'success' });
-      setCreateProposalModalOpen(false); // <-- FIXED
+      setCreateProposalModalOpen(false);
     } catch (error) {
       console.error('Error saving proposal:', error);
       setToast({ message: `Error saving proposal: ${error.message}`, type: 'error' });
@@ -525,6 +655,7 @@ const ProposalManagement = ({ user }) => {
           <Header 
             onQuickAddClient={() => setQuickClientModalOpen(true)} 
             onCreateProposal={() => setCreateProposalModalOpen(true)}
+            onImportProducts={() => setImportModalOpen(true)}
             user={user}
           />
           
@@ -640,7 +771,128 @@ const ProposalManagement = ({ user }) => {
             />
           </motion.div>
 
-          {/* Modals */}
+          {/* Import Products Modal */}
+          <AnimatePresence>
+            {importModalOpen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-lg shadow-xl max-w-md w-full"
+                >
+                  <div className="p-6">
+                    <h2 className="text-xl font-semibold mb-4">Import Products</h2>
+                    
+                    <div className="space-y-4">
+                      {/* CSV Import */}
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <FaFileCsv className="text-3xl text-green-500 mx-auto mb-3" />
+                        <h3 className="font-medium mb-2">Import from CSV</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Upload a CSV file with product data
+                        </p>
+                        <input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => handleFileSelect(e, 'csv')}
+                          className="hidden"
+                          id="csv-upload"
+                        />
+                        <label
+                          htmlFor="csv-upload"
+                          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer"
+                        >
+                          Choose CSV File
+                        </label>
+                      </div>
+
+                      {/* Excel Import */}
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <FaFileExcel className="text-3xl text-blue-500 mx-auto mb-3" />
+                        <h3 className="font-medium mb-2">Import from Excel</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Upload an Excel file (XLSX or XLS)
+                        </p>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={(e) => handleFileSelect(e, 'xlsx')}
+                          className="hidden"
+                          id="excel-upload"
+                        />
+                        <label
+                          htmlFor="excel-upload"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
+                        >
+                          Choose Excel File
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Import Status */}
+                    {importLoading && (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <div className="flex items-center">
+                          <FaSpinner className="animate-spin text-blue-500 mr-2" />
+                          <span className="text-blue-700">Importing products...</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {importSuccessCount > 0 && (
+                      <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                        <p className="text-green-700">
+                          Successfully imported {importSuccessCount} products
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Import Errors */}
+                    {importErrors.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="font-medium text-red-600 mb-2">
+                          Import Errors ({importErrors.length})
+                        </h4>
+                        <div className="max-h-32 overflow-y-auto">
+                          {importErrors.slice(0, 5).map((error, index) => (
+                            <div key={index} className="text-sm text-red-600 mb-1">
+                              Row {error.row}: {error.error}
+                            </div>
+                          ))}
+                          {importErrors.length > 5 && (
+                            <div className="text-sm text-red-600">
+                              ... and {importErrors.length - 5} more errors
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setImportModalOpen(false);
+                          setImportErrors([]);
+                          setImportSuccessCount(0);
+                        }}
+                        className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Other Modals */}
           <PreviewModal proposal={previewProposal} onClose={() => setPreviewProposal(null)} />
           
           <SendModal 
@@ -653,8 +905,8 @@ const ProposalManagement = ({ user }) => {
           <CreateProposalModal
             open={createProposalModalOpen}
             onClose={() => setCreateProposalModalOpen(false)}
-            onAddClient={handleInviteClient} // your existing handler
-            onSave={handleSaveNewProposal} // existing save handler
+            onAddClient={handleInviteClient}
+            onSave={handleSaveNewProposal}
             clients={clients}
             availableProducts={availableProducts}
           />
@@ -668,7 +920,7 @@ const ProposalManagement = ({ user }) => {
             onSave={handleSaveEditedProposal}
             proposal={editingProposal}
             clients={clients || []}
-            availableProducts={normalizedProducts} // Use normalized products
+            availableProducts={normalizedProducts}
             loading={productsLoading}
           />
           
@@ -694,9 +946,6 @@ const ProposalManagement = ({ user }) => {
               </AnimatePresence>
             </div>
           )}
-
-          {/* Debug Info - Remove in production */}
-        
         </>
       )}
     </div>

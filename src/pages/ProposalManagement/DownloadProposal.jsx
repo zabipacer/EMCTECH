@@ -21,10 +21,10 @@ const PDF_CONFIG = {
     titleSize: 14,
     bodySize: 10,
     smallSize: 8,
-    tableHeaderSize: 11,    // increased
-    tableBodySize: 10,      // increased
-    tableTitleSize: 12,     // new for product names
-    minTableBodySize: 9     // increased
+    tableHeaderSize: 11,
+    tableBodySize: 10,
+    tableTitleSize: 12,
+    minTableBodySize: 9
   },
   spacing: {
     xs: 2,
@@ -35,23 +35,22 @@ const PDF_CONFIG = {
     xxl: 24
   },
   table: {
-    // Enhanced column distribution for larger images and better layout
-    colPercents: [4, 22, 20, 18, 6, 6, 12, 12], // image column increased to 18%
-    defaultRowPadding: 6,    // increased
-    defaultMinRowHeight: 20, // increased for bigger rows
-    cellPadding: 5,          // increased
-    imageMaxHeight: 45,      // increased - much larger images
-    imageMaxWidth: 25,       // new - maximum image width
-    categoryRowHeight: 12,   // increased
-    rowGap: 3               // spacing between rows
+    colPercents: [4, 22, 20, 18, 6, 6, 12, 12],
+    defaultRowPadding: 6,
+    defaultMinRowHeight: 20,
+    cellPadding: 5,
+    imageMaxHeight: 45,
+    imageMaxWidth: 25,
+    categoryRowHeight: 12,
+    rowGap: 3
   },
   images: { 
     maxDimensionPx: 1200,
     maxDimensionMm: 120,
     quality: 0.97,
     timeout: 10000,
-    logoWidth: 60,      // Increased from 45
-    logoHeight: 25      // Increased from 18
+    logoWidth: 60,
+    logoHeight: 25
   },
   layout: { reservedBottom: 50 }
 };
@@ -472,7 +471,6 @@ class EMCProposalPDF {
     this.debug = !!(options.debug);
   }
 
-  // Normalize various input values to safe printable strings
   _toPlainString(val, fallback = '') {
     if (val === null || val === undefined || val === '') return fallback;
     if (typeof val === 'string') return val;
@@ -486,192 +484,289 @@ class EMCProposalPDF {
     return String(val);
   }
 
-  async prepareData(proposalData) {
-    const proposal = proposalData.proposal || proposalData;
-    const sendingCompany = proposal.company || 'emctech';
-    const templateType = proposal.templateType || '';
-    const isTechnical = templateType.includes('technical');
-    const hasImages = templateType.includes('with-images');
+async prepareData(proposalData) {
+  const proposal = proposalData.proposal || proposalData;
+  const sendingCompany = proposal.company || 'emctech';
+  const templateType = proposal.templateType || '';
+  const isTechnical = templateType.includes('technical');
+  const hasImages = templateType.includes('with-images');
 
-    // Load company logos
-    if (sendingCompany === 'emctech') {
+  // Load company logos
+  if (sendingCompany === 'emctech') {
+    try {
+      this.logos.emc = await this.imageLoader.loadImage(
+        'https://i.ibb.co/w9WQb0D/Whats-App-Image-2025-10-22-at-16-05-26-7a8ba761.jpg',
+        PDF_CONFIG.images.maxDimensionPx
+      );
+    } catch (e) {
+      console.warn('EMC logo load failed', e);
       try {
         this.logos.emc = await this.imageLoader.loadImage(
-          'https://i.ibb.co/w9WQb0D/Whats-App-Image-2025-10-22-at-16-05-26-7a8ba761.jpg',
+          'https://i.ibb.co/Z1NxmgGT/Whats-App-Image-2025-10-20-at-19-18-39-a4aa3c8e.jpg',
           PDF_CONFIG.images.maxDimensionPx
         );
-      } catch (e) {
-        console.warn('EMC logo load failed', e);
-        // Fallback to original if needed
-        try {
-          this.logos.emc = await this.imageLoader.loadImage(
-            'https://i.ibb.co/Z1NxmgGT/Whats-App-Image-2025-10-20-at-19-18-39-a4aa3c8e.jpg',
-            PDF_CONFIG.images.maxDimensionPx
-          );
-        } catch (fallbackError) {
-          console.warn('EMC fallback logo also failed', fallbackError);
-        }
+      } catch (fallbackError) {
+        console.warn('EMC fallback logo also failed', fallbackError);
       }
-    } else if (sendingCompany === 'innovamechanics') {
-      try {
-        this.logos.innova = await this.imageLoader.loadImage(
-          'https://i.ibb.co/Csmh58wr/Whats-App-Image-2025-10-20-at-19-20-15-54c63aa3.jpg',
-          PDF_CONFIG.images.maxDimensionPx
-        );
-      } catch (e) { console.warn('INNOVA logo load failed', e); }
     }
-
-    // Company/terms
-    const companyData = proposal.companyDetails || {};
-    const termsData = proposal.terms || proposal.deliveryTerms || {};
-
-    // Prepare data for each type
-    if (isTechnical) {
-      // Technical offer
-      const rfqItemsIn = proposalData.rfqItems || proposalData.items || [];
-      const items = await Promise.all((rfqItemsIn || []).map(async (item, i) => {
-        let imageMeta = null;
-        const url = (item.imageUrl || item.image || item.img);
-        if (url && hasImages) {
-          try { imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); }
-          catch (e) { imageMeta = null; }
-        }
-        return {
-          number: (i + 1).toString(),
-          name: (item.description || item.name || 'Technical Item').toString(),
-          description: item.technicalDescription || item.description || '',
-          specifications: Array.isArray(item.specifications) ? item.specifications : (item.specs || []),
-          manufacturer: item.manufacturer || '',
-          partNumber: item.partNumber || item.pn || '',
-          unit: item.unit || 'each',
-          quantity: item.quantity || 1,
-          unitPrice: item.unitPrice || item.price || 0,
-          willBeSupplied: item.willBeSupplied || '',
-          imageMeta,
-          raw: item,
-          isTechnical: true
-        };
-      }));
-
-      this.data = {
-        company: {
-          name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
-          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
-          address: this._toPlainString(companyData.address || proposal.address || 
-            (sendingCompany === 'emctech' 
-              ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
-              : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, UK')),
-          phone: this._toPlainString(companyData.phone || proposal.phone || 
-            (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
-          email: this._toPlainString(companyData.email || proposal.email || 
-            (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
-          website: this._toPlainString(companyData.website || 
-            (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
-          bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
-          mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
-          taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
-          oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
-        },
-        metadata: {
-          number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
-          date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
-          recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
-          documentNumber: this._toPlainString(proposal.documentNumber || '')
-        },
-        terms: {
-          payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
-          deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
-          delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
-          validity: this._toPlainString(proposal.validity || '30 days'),
-          warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
-        },
-        signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
-        items,
-        sendingCompany,
-        isTechnical: true,
-        hasImages,
-        templateType
-      };
-
-      // Partner logos
-      try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
-
-      this.data.subtotal = (this.data.items || []).reduce((s, it) => s + ((it.unitPrice || 0) * (it.quantity || 1)), 0);
-      this.data.taxAmount = this.data.subtotal * 0.12;
-      this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
-
-    } else {
-      // Commercial offer
-      const productsIn = proposalData.products || proposalData.selectedProducts || [];
-      const products = await Promise.all(productsIn.map(async (p, i) => {
-        let imageMeta = null;
-        const url = p.image || p.imageUrl || p.img;
-        if (url) {
-          try { imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); }
-          catch (e) { imageMeta = null; }
-        }
-        return {
-          number: (i + 1).toString(),
-          name: typeof p.name === 'object' ? (p.name.EN || Object.values(p.name)[0] || '') : (p.name || 'Product Name'),
-          description: p.description || p.details || p.seo?.description || 'Product description will be provided.',
-          unit: p.unit || 'SET',
-          quantity: p.quantity || 1,
-          unitPrice: p.unitPrice || p.price || 0,
-          imageMeta,
-          raw: p,
-          isTechnical: false
-        };
-      }));
-
-      this.data = {
-        company: {
-          name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
-          shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
-          address: this._toPlainString(companyData.address || proposal.address || 
-            (sendingCompany === 'emctech' 
-              ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
-              : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, U')),
-          phone: this._toPlainString(companyData.phone || proposal.phone || 
-            (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
-          email: this._toPlainString(companyData.email || proposal.email || 
-            (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
-          website: this._toPlainString(companyData.website || 
-            (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
-          bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
-          mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
-          taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
-          oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
-        },
-        metadata: {
-          number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
-          date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
-          recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
-          documentNumber: this._toPlainString(proposal.documentNumber || '')
-        },
-        terms: {
-          payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
-          deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
-          delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
-          validity: this._toPlainString(proposal.validity || '30 days'),
-          warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
-        },
-        signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
-        products,
-        sendingCompany,
-        isTechnical: false,
-        hasImages,
-        templateType
-      };
-
-      // Partner logos
-      try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
-
-      this.data.subtotal = (this.data.products || []).reduce((s, p) => s + (p.unitPrice * p.quantity), 0);
-      this.data.taxAmount = this.data.subtotal * 0.12;
-      this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
-    }
+  } else if (sendingCompany === 'innovamechanics') {
+    try {
+      this.logos.innova = await this.imageLoader.loadImage(
+        'https://i.ibb.co/Csmh58wr/Whats-App-Image-2025-10-20-at-19-20-15-54c63aa3.jpg',
+        PDF_CONFIG.images.maxDimensionPx
+      );
+    } catch (e) { console.warn('INNOVA logo load failed', e); }
   }
 
+  const companyData = proposal.companyDetails || {};
+  const termsData = proposal.terms || proposal.deliveryTerms || {};
+
+  if (isTechnical) {
+    // Technical offer - FIXED: Proper image loading and description extraction
+    const rfqItemsIn = proposalData.rfqItems || proposalData.items || [];
+    const items = await Promise.all((rfqItemsIn || []).map(async (item, i) => {
+      let imageMeta = null;
+      
+      const url = item.imageUrl || item.image || item.img || item.thumbnail;
+      const shouldLoadImage = hasImages && url && url.trim() !== '';
+      
+      if (shouldLoadImage) {
+        try { 
+          imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); 
+        }
+        catch (e) { 
+          console.warn('Failed to load technical item image:', url, e);
+          imageMeta = null; 
+        }
+      }
+      
+      // COMPREHENSIVE DESCRIPTION EXTRACTION FOR TECHNICAL ITEMS
+      let description = '';
+      
+      if (item.technicalDescription && item.technicalDescription.trim()) {
+        description = item.technicalDescription;
+      } else if (item.description && item.description.trim()) {
+        description = item.description;
+      } else if (item.specifications && Array.isArray(item.specifications) && item.specifications.length > 0) {
+        description = item.specifications.filter(s => s && s.trim()).join(', ');
+      } else if (item.specs && Array.isArray(item.specs) && item.specs.length > 0) {
+        description = item.specs.filter(s => s && s.trim()).join(', ');
+      } else if (item.details && item.details.trim()) {
+        description = item.details;
+      }
+      
+      // Final fallback
+      if (!description || !description.trim()) {
+        description = 'Technical specifications will be provided.';
+      }
+      
+      console.log(`Technical Item ${i + 1} description extraction:`, {
+        itemName: item.description || item.name,
+        hasTechnicalDescription: !!item.technicalDescription,
+        hasDescription: !!item.description,
+        hasSpecifications: !!(item.specifications && item.specifications.length),
+        finalDescription: description
+      });
+
+      return {
+        id: `tech-${item.id || i}-${Date.now()}`,
+        number: (i + 1).toString(),
+        name: (item.description || item.name || 'Technical Item').toString(),
+        description: description,
+        specifications: Array.isArray(item.specifications) ? item.specifications : (item.specs || []),
+        manufacturer: item.manufacturer || '',
+        partNumber: item.partNumber || item.pn || '',
+        unit: item.unit || 'each',
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || item.price || 0,
+        willBeSupplied: item.willBeSupplied || '',
+        imageMeta,
+        raw: item,
+        isTechnical: true
+      };
+    }));
+
+    this.data = {
+      company: {
+        name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
+        shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
+        address: this._toPlainString(companyData.address || proposal.address || 
+          (sendingCompany === 'emctech' 
+            ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
+            : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, UK')),
+        phone: this._toPlainString(companyData.phone || proposal.phone || 
+          (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
+        email: this._toPlainString(companyData.email || proposal.email || 
+          (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
+        website: this._toPlainString(companyData.website || 
+          (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
+        bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
+        mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
+        taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
+        oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
+      },
+      metadata: {
+        number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
+        date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
+        recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
+        documentNumber: this._toPlainString(proposal.documentNumber || '')
+      },
+      terms: {
+        payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
+        deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
+        delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
+        validity: this._toPlainString(proposal.validity || '30 days'),
+        warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
+      },
+      signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
+      items,
+      sendingCompany,
+      isTechnical: true,
+      hasImages,
+      templateType
+    };
+
+    try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
+
+    this.data.subtotal = (this.data.items || []).reduce((s, it) => s + ((it.unitPrice || 0) * (it.quantity || 1)), 0);
+    this.data.taxAmount = this.data.subtotal * 0.12;
+    this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
+
+  } else {
+    // Commercial offer - FIXED: COMPREHENSIVE DESCRIPTION EXTRACTION
+    const productsIn = proposalData.products || proposalData.selectedProducts || [];
+    const products = await Promise.all(productsIn.map(async (p, i) => {
+      let imageMeta = null;
+      const url = p.image || p.imageUrl || p.img || p.thumbnail;
+      if (url) {
+        try { imageMeta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx); }
+        catch (e) { imageMeta = null; }
+      }
+      
+      // FIXED: COMPREHENSIVE DESCRIPTION EXTRACTION FOR COMMERCIAL PRODUCTS
+      let description = '';
+      
+      // Priority 1: Direct description fields
+      if (p.technicalDescription && typeof p.technicalDescription === 'string' && p.technicalDescription.trim()) {
+        description = p.technicalDescription;
+      } else if (p.description && typeof p.description === 'string' && p.description.trim()) {
+        description = p.description;
+      } else if (p.details && typeof p.details === 'string' && p.details.trim()) {
+        description = p.details;
+      } 
+      // Priority 2: Object-based description (localized)
+      else if (p.description && typeof p.description === 'object') {
+        description = p.description.EN || p.description.en || Object.values(p.description)[0] || '';
+      }
+      // Priority 3: SEO and long descriptions
+      else if (p.seo?.description && typeof p.seo.description === 'string' && p.seo.description.trim()) {
+        description = p.seo.description;
+      } else if (p.longDescription && typeof p.longDescription === 'string' && p.longDescription.trim()) {
+        description = p.longDescription;
+      }
+      // Priority 4: Specifications
+      else if (p.specifications && Array.isArray(p.specifications) && p.specifications.length > 0) {
+        description = p.specifications.filter(s => s && s.trim()).join(', ');
+      } else if (p.specs && Array.isArray(p.specs) && p.specs.length > 0) {
+        // Handle both array of strings and array of objects
+        if (typeof p.specs[0] === 'string') {
+          description = p.specs.filter(s => s && s.trim()).join(', ');
+        } else {
+          description = p.specs
+            .filter(spec => spec && spec.key && spec.value)
+            .map(spec => `${spec.key}: ${spec.value}`)
+            .join(', ');
+        }
+      }
+      // Priority 5: Additional fields that might contain description
+      else if (p.features && Array.isArray(p.features) && p.features.length > 0) {
+        description = p.features.filter(f => f && f.trim()).join(', ');
+      } else if (p.characteristics && typeof p.characteristics === 'string' && p.characteristics.trim()) {
+        description = p.characteristics;
+      }
+      
+      // Final fallback - use product name if no description found
+      if (!description || !description.trim()) {
+        const productName = typeof p.name === 'object' ? 
+          (p.name.EN || Object.values(p.name)[0] || 'Product') : 
+          (p.name || 'Product');
+        description = `${productName} - Product details will be provided.`;
+      }
+      
+      console.log(`Commercial Product ${i + 1} description extraction:`, {
+        productId: p.id,
+        productName: typeof p.name === 'object' ? (p.name.EN || Object.values(p.name)[0]) : p.name,
+        hasDescription: !!(p.description),
+        hasTechnicalDescription: !!(p.technicalDescription),
+        hasDetails: !!(p.details),
+        hasSeo: !!(p.seo?.description),
+        hasSpecs: !!(p.specs && p.specs.length),
+        hasSpecifications: !!(p.specifications && p.specifications.length),
+        descriptionType: typeof p.description,
+        finalDescription: description.substring(0, 100) + (description.length > 100 ? '...' : '')
+      });
+      
+      return {
+        number: (i + 1).toString(),
+        name: typeof p.name === 'object' ? (p.name.EN || Object.values(p.name)[0] || '') : (p.name || 'Product Name'),
+        description: description, // Use the properly extracted description
+        unit: p.unit || 'SET',
+        quantity: p.quantity || 1,
+        unitPrice: p.unitPrice || p.price || 0,
+        imageMeta,
+        raw: p,
+        isTechnical: false
+      };
+    }));
+
+    this.data = {
+      company: {
+        name: this._toPlainString(companyData.name || proposal.companyName || 'LLC «ELECTRO-MECHANICAL CONSTRUCTION TECHNOLOGY»'),
+        shortName: this._toPlainString(proposal.companyShort || (sendingCompany === 'emctech' ? 'EMC Technology' : 'Innova Mechanics Ltd')),
+        address: this._toPlainString(companyData.address || proposal.address || 
+          (sendingCompany === 'emctech' 
+            ? 'Tashkent city, Yunusabad district, Bogishamol 21B'
+            : 'Unit 19E Cherwell Business Village, Southam Road, Banbury, Oxford, OX16 2SP, UK')),
+        phone: this._toPlainString(companyData.phone || proposal.phone || 
+          (sendingCompany === 'emctech' ? '+998 90 122 55 18' : '+44 1865 602161')),
+        email: this._toPlainString(companyData.email || proposal.email || 
+          (sendingCompany === 'emctech' ? 'info@emctech.uz' : 'info@innovamechanics.com')),
+        website: this._toPlainString(companyData.website || 
+          (sendingCompany === 'innovamechanics' ? 'www.innovamechanics.com' : '')),
+        bankAccount: this._toPlainString(companyData.bankAccount || proposal.bankAccount || '2020 8000 0052 8367 7001'),
+        mfo: this._toPlainString(companyData.mfo || proposal.mfo || '08419'),
+        taxId: this._toPlainString(companyData.taxId || proposal.taxId || '307 738 207'),
+        oked: this._toPlainString(companyData.oked || proposal.oked || '43299')
+      },
+      metadata: {
+        number: this._toPlainString(proposal.proposalNumber || proposal.number || 'NoEMC28/0214'),
+        date: this._toPlainString(proposal.proposalDate || proposal.date || new Date().toLocaleDateString('en-GB')),
+        recipient: this._toPlainString(proposal.recipient || proposal.clientName || 'To Directorate of ENERSOK FE LCC'),
+        documentNumber: this._toPlainString(proposal.documentNumber || '')
+      },
+      terms: {
+        payment: this._toPlainString(termsData.paymentTerms || proposal.paymentTerms || '50 % prepayment'),
+        deliveryTime: this._toPlainString(termsData.deliveryTime || proposal.deliveryTime || '6-12 weeks'),
+        delivery: this._toPlainString(termsData.incoterms || proposal.deliveryTerms || 'DDP'),
+        validity: this._toPlainString(proposal.validity || '30 days'),
+        warranty: this._toPlainString(proposal.warranty || 'Standard manufacturer warranty applies')
+      },
+      signatory: this._toPlainString(proposal.authorizedSignatory || proposal.signatory || 'S.S. Abdushakarov'),
+      products,
+      sendingCompany,
+      isTechnical: false,
+      hasImages,
+      templateType
+    };
+
+    try { this.data.partnerLogos = await this.loadPartnerLogos(); } catch (e) { this.data.partnerLogos = []; }
+
+    this.data.subtotal = (this.data.products || []).reduce((s, p) => s + (p.unitPrice * p.quantity), 0);
+    this.data.taxAmount = this.data.subtotal * 0.12;
+    this.data.grandTotal = this.data.subtotal + this.data.taxAmount;
+  }
+}
+  // ... (rest of the PDF rendering methods remain the same)
   renderTable() {
     this.renderTableHeader();
     this.renderCategoryRow(this.data.isTechnical ? 'TECHNICAL ITEMS' : 'TESTING AND MEASURING EQUIPMENT');
@@ -695,7 +790,6 @@ class EMCProposalPDF {
     const headerFits = [];
     let maxHeaderInnerHeight = 0;
     
-    // Measure each header cell with better sizing
     for (let i = 0; i < headers.length; i++) { 
       const w = this.colWidths[i] - headerPadding * 2;
       const fit = this.measurer.fitFontSizeToBox(headers[i], 'helvetica', PDF_CONFIG.fonts.tableHeaderSize, 8, w, 20);
@@ -712,7 +806,6 @@ class EMCProposalPDF {
     
     const startY = layout.getY(); 
     
-    // Enhanced header background with gradient effect
     doc.setFillColor(...PDF_CONFIG.colors.primary);
     doc.roundedRect(margin, startY, this.usableWidth, headerH, 2, 2, 'F');
     
@@ -736,7 +829,6 @@ class EMCProposalPDF {
       x += w; 
     }
     
-    // Header border
     doc.setDrawColor(...PDF_CONFIG.colors.primary);
     doc.setLineWidth(0.3);
     x = margin; 
@@ -764,7 +856,6 @@ class EMCProposalPDF {
     
     const startY = layout.getY(); 
     
-    // Enhanced category background
     doc.setFillColor(...PDF_CONFIG.colors.secondary);
     doc.roundedRect(margin, startY, this.usableWidth, h, 1, 1, 'F');
     
@@ -777,7 +868,6 @@ class EMCProposalPDF {
       doc.text(ln, margin + padding, textY + idx * this.lineHeightForFontSize(fit.fontSize)); 
     });
     
-    // Border
     doc.setDrawColor(...PDF_CONFIG.colors.secondary);
     doc.setLineWidth(0.3);
     doc.rect(margin, startY, this.usableWidth, h); 
@@ -789,218 +879,215 @@ class EMCProposalPDF {
     layout.moveDown(h + 3); 
   }
 
-  renderProductRowWithFlow(product) { 
-    const doc = this.doc; 
-    const layout = this.layout; 
-    const margin = PDF_CONFIG.page.margin; 
-    const padding = PDF_CONFIG.table.cellPadding; 
+renderProductRowWithFlow(product) { 
+  const doc = this.doc; 
+  const layout = this.layout; 
+  const margin = PDF_CONFIG.page.margin; 
+  const padding = PDF_CONFIG.table.cellPadding; 
 
-    // Use correct array for rowIndex
-    const arr = this.data.isTechnical ? this.data.items : this.data.products;
-    const rowIndex = arr.indexOf(product);
+  const arr = this.data.isTechnical ? this.data.items : this.data.products;
+  const rowIndex = arr.indexOf(product);
 
-    // Measure text content with better constraints and improved column widths
-    const nameW = this.colWidths[1] - padding * 2;
-    const nameFit = this.measurer.fitFontSizeToBox(
-      product.name, 
-      'helvetica', 
-      PDF_CONFIG.fonts.tableTitleSize,  // Use larger font for product names
-      PDF_CONFIG.fonts.minTableBodySize, 
-      nameW, 
-      50  // Increased height for better text display
-    );
-    
-    const descW = this.colWidths[2] - padding * 2;
-    const descFit = this.measurer.fitFontSizeToBox(
-      product.description, 
-      'helvetica', 
-      PDF_CONFIG.fonts.tableBodySize, 
-      PDF_CONFIG.fonts.minTableBodySize, 
-      descW, 
-      60  // Increased height for descriptions
-    );
-    
-    const imageCellW = this.colWidths[3] - padding * 2;
-    const imageMaxH = PDF_CONFIG.table.imageMaxHeight;
-    const imageMaxW = PDF_CONFIG.table.imageMaxWidth;
-    
-    // Calculate row height based on content with minimum safety margins
-    const nameHeight = nameFit.lines.length * this.lineHeightForFontSize(nameFit.fontSize);
-    const descHeight = descFit.lines.length * this.lineHeightForFontSize(descFit.fontSize);
-    const imageHeight = product.imageMeta ? Math.min(imageMaxH, Math.max(nameHeight, descHeight)) : 0;
-    
-    const contentHeight = Math.max(nameHeight, descHeight, imageHeight);
-    const rowHeight = Math.max(
-      PDF_CONFIG.table.defaultMinRowHeight, 
-      contentHeight + padding * 2 + 4  // Added extra padding for better spacing
-    );
+  const nameW = this.colWidths[1] - padding * 2;
+  const nameFit = this.measurer.fitFontSizeToBox(
+    product.name, 
+    'helvetica', 
+    PDF_CONFIG.fonts.tableTitleSize,
+    PDF_CONFIG.fonts.minTableBodySize, 
+    nameW, 
+    50
+  );
+  
+  const descW = this.colWidths[2] - padding * 2;
+  const descFit = this.measurer.fitFontSizeToBox(
+    product.description,
+    'helvetica', 
+    PDF_CONFIG.fonts.tableBodySize, 
+    PDF_CONFIG.fonts.minTableBodySize, 
+    descW, 
+    60
+  );
+  
+  const imageCellW = this.colWidths[3] - padding * 2;
+  const imageMaxH = PDF_CONFIG.table.imageMaxHeight;
+  const imageMaxW = PDF_CONFIG.table.imageMaxWidth;
+  
+  const nameHeight = nameFit.lines.length * this.lineHeightForFontSize(nameFit.fontSize);
+  const descHeight = descFit.lines.length * this.lineHeightForFontSize(descFit.fontSize);
+  const imageHeight = product.imageMeta ? Math.min(imageMaxH, Math.max(nameHeight, descHeight)) : 0;
+  
+  // FIXED: Limit the content height to prevent excessively tall rows
+  const maxContentHeight = 40; // Maximum content height in mm
+  const contentHeight = Math.min(maxContentHeight, Math.max(
+    Math.max(nameHeight, descHeight, imageHeight),
+    PDF_CONFIG.table.defaultMinRowHeight
+  ));
+  
+  // FIXED: Calculate row height more conservatively
+  const rowHeight = Math.max(
+    PDF_CONFIG.table.defaultMinRowHeight, 
+    contentHeight + padding * 2
+  );
 
-    // Enhanced page overflow check with buffer
-    if (layout.getY() + rowHeight > layout.pageHeight - margin - PDF_CONFIG.layout.reservedBottom - 10) {
-      layout.addPage(); 
-      this.renderTableHeader();
+  // FIXED: Use proper space calculation without excessive reserved space
+  if (layout.getY() + rowHeight > layout.pageHeight - margin - 20) {
+    layout.addPage(); 
+  }
+
+  const rowY = layout.getY();
+  
+  if (rowIndex % 2 === 0) {
+    doc.setFillColor(...PDF_CONFIG.colors.lightGray);
+    doc.rect(margin, layout.getY(), this.usableWidth, rowHeight, 'F'); // FIXED: Add height to fill
+  }
+  
+  doc.setDrawColor(...PDF_CONFIG.colors.mediumGray);
+  doc.setLineWidth(0.2);
+  let x = margin; 
+  for (let i = 0; i < this.colWidths.length; i++) { 
+    doc.rect(x, rowY, this.colWidths[i], rowHeight); 
+    x += this.colWidths[i]; 
+  }
+
+  x = margin; 
+  
+  // Number column
+  doc.setFont('helvetica', 'bold'); 
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_CONFIG.colors.primary);
+  const numX = x + this.colWidths[0] / 2; 
+  const numY = rowY + rowHeight / 2 + 2; 
+  doc.text(product.number, numX, numY, { align: 'center' });
+  x += this.colWidths[0];
+
+  // Name column
+  doc.setFont('helvetica', 'bold'); 
+  doc.setFontSize(nameFit.fontSize);
+  doc.setTextColor(...PDF_CONFIG.colors.primary);
+  const nameStartY = rowY + padding + 2;
+  nameFit.lines.forEach((ln, li) => { 
+    const targetY = nameStartY + li * this.lineHeightForFontSize(nameFit.fontSize);
+    if (targetY < rowY + rowHeight - 2) {
+      doc.text(ln, x + padding, targetY); 
     }
+  });
+  
+  if (this.debug) {
+    this._debugBox(x, rowY, this.colWidths[1], rowHeight, nameFit.fontSize, nameFit.lines);
+  }
+  x += this.colWidths[1];
 
-    const rowY = layout.getY(); 
-    
-    // Enhanced alternate row coloring for better readability
-    if (rowIndex % 2 === 0) {
-      doc.setFillColor(...PDF_CONFIG.colors.lightGray);
-      doc.rect(margin, layout.getY(), this.usableWidth, /* rowHeight */ 0, 'F'); // rowHeight will be set below
+  // Description column
+  doc.setFont('helvetica', 'normal'); 
+  doc.setFontSize(descFit.fontSize);
+  doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+  const descStartY = rowY + padding + 2;
+  descFit.lines.forEach((ln, i) => { 
+    const targetY = descStartY + i * this.lineHeightForFontSize(descFit.fontSize);
+    if (targetY < rowY + rowHeight - 2) {
+      doc.text(ln, x + padding, targetY); 
     }
-    
-    // Draw cell borders with better styling
-    doc.setDrawColor(...PDF_CONFIG.colors.mediumGray);
-    doc.setLineWidth(0.2);
-    let x = margin; 
-    for (let i = 0; i < this.colWidths.length; i++) { 
-      doc.rect(x, rowY, this.colWidths[i], rowHeight); 
-      x += this.colWidths[i]; 
-    }
+  });
+  
+  if (this.debug) {
+    this._debugBox(x, rowY, this.colWidths[2], rowHeight, descFit.fontSize, descFit.lines);
+  }
+  x += this.colWidths[2];
 
-    x = margin; 
-    
-    // Number cell - using simple sequential number with better styling
-    doc.setFont('helvetica', 'bold'); 
-    doc.setFontSize(10);  // Slightly larger
-    doc.setTextColor(...PDF_CONFIG.colors.primary);  // Use primary color for numbers
-    const numX = x + this.colWidths[0] / 2; 
-    const numY = rowY + rowHeight / 2 + 2; 
-    doc.text(product.number, numX, numY, { align: 'center' });
-    x += this.colWidths[0];
+  // Image column
+  if (product.imageMeta && product.imageMeta.dataUrl) {
+    try {
+      const imgX = x + padding;
+      const imgY = rowY + padding;
+      const maxImgW = Math.min(imageMaxW, this.colWidths[3] - padding * 2);
+      const maxImgH = Math.min(imageMaxH, rowHeight - padding * 2);
 
-    // Name cell with improved text rendering and larger font
-    doc.setFont('helvetica', 'bold'); 
-    doc.setFontSize(nameFit.fontSize);
-    doc.setTextColor(...PDF_CONFIG.colors.primary);
-    const nameStartY = rowY + padding + 2;
-    nameFit.lines.forEach((ln, li) => { 
-      const targetY = nameStartY + li * this.lineHeightForFontSize(nameFit.fontSize);
-      doc.text(ln, x + padding, Math.min(targetY, rowY + rowHeight - 2)); 
-    });
-    
-    if (this.debug) {
-      this._debugBox(x, rowY, this.colWidths[1], rowHeight, nameFit.fontSize, nameFit.lines);
-    }
-    x += this.colWidths[1];
+      let targetW = maxImgW;
+      const pmw = product.imageMeta.width || 1;
+      const pmh = product.imageMeta.height || 1;
+      let targetH = (pmh / pmw) * targetW;
 
-    // Description cell with overflow protection and better styling
-    doc.setFont('helvetica', 'normal'); 
-    doc.setFontSize(descFit.fontSize);
-    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-    const descStartY = rowY + padding + 2;
-    descFit.lines.forEach((ln, i) => { 
-      const targetY = descStartY + i * this.lineHeightForFontSize(descFit.fontSize);
-      if (targetY < rowY + rowHeight - 2) {
-        doc.text(ln, x + padding, targetY); 
-      }
-    });
-    
-    if (this.debug) {
-      this._debugBox(x, rowY, this.colWidths[2], rowHeight, descFit.fontSize, descFit.lines);
-    }
-    x += this.colWidths[2];
-
-    // ENHANCED IMAGE CELL - MUCH LARGER AND BETTER STYLED
-    if (product.imageMeta && product.imageMeta.dataUrl) {
-      try {
-        const imgX = x + padding;
-        const imgY = rowY + padding;
-        const maxImgW = Math.min(imageMaxW, this.colWidths[3] - padding * 2);
-        const maxImgH = Math.min(imageMaxH, rowHeight - padding * 2);
-
-        let targetW = maxImgW;
-        const pmw = product.imageMeta.width || 1;
-        const pmh = product.imageMeta.height || 1;
-        let targetH = (pmh / pmw) * targetW;
-
-        // If too tall, constrain by height; otherwise try to use more width
-        if (targetH > maxImgH) {
-          targetH = maxImgH;
-          targetW = (pmw / pmh) * targetH;
-        } else {
-          // Try to use optimal width for better image display
-          const optimalW = Math.min(maxImgW, (pmw / pmh) * maxImgH);
-          if (optimalW > targetW * 0.8) {  // Use more width if available
-            targetW = optimalW;
-            targetH = (pmh / pmw) * targetW;
-          }
+      if (targetH > maxImgH) {
+        targetH = maxImgH;
+        targetW = (pmw / pmh) * targetH;
+      } else {
+        const optimalW = Math.min(maxImgW, (pmw / pmh) * maxImgH);
+        if (optimalW > targetW * 0.8) {
+          targetW = optimalW;
+          targetH = (pmh / pmw) * targetW;
         }
-
-        // Center image in cell with bounds checking
-        const finalX = Math.max(imgX, x + (this.colWidths[3] - targetW) / 2);
-        const finalY = Math.max(imgY, rowY + (rowHeight - targetH) / 2);
-
-        // Add subtle border around image
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.3);
-        doc.rect(finalX - 1, finalY - 1, targetW + 2, targetH + 2);
-
-        const mime = (product.imageMeta.mime && product.imageMeta.mime.includes('png')) ? 'PNG' : 'JPEG';
-        doc.addImage(product.imageMeta.dataUrl, mime, finalX, finalY, targetW, targetH);
-      } catch (e) {
-        console.warn('addImage failed', e);
-        this.renderEnhancedImagePlaceholder(x, rowY, this.colWidths[3], rowHeight, product.name);
       }
-    } else {
+
+      const finalX = Math.max(imgX, x + (this.colWidths[3] - targetW) / 2);
+      const finalY = Math.max(imgY, rowY + (rowHeight - targetH) / 2);
+
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.rect(finalX - 1, finalY - 1, targetW + 2, targetH + 2);
+
+      const mime = (product.imageMeta.mime && product.imageMeta.mime.includes('png')) ? 'PNG' : 'JPEG';
+      doc.addImage(product.imageMeta.dataUrl, mime, finalX, finalY, targetW, targetH);
+    } catch (e) {
+      console.warn('addImage failed', e);
       this.renderEnhancedImagePlaceholder(x, rowY, this.colWidths[3], rowHeight, product.name);
     }
-    
-    if (this.debug) {
-      this._debugBox(x, rowY, this.colWidths[3], rowHeight, 7, []);
-    }
-    x += this.colWidths[3];
-
-    // Unit cell with better styling
-    doc.setFont('helvetica', 'normal'); 
-    doc.setFontSize(9); 
-    doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-    const unitText = String(product.unit).toUpperCase(); 
-    const unitX = x + this.colWidths[4] / 2; 
-    const unitY = rowY + rowHeight / 2 + 2; 
-    doc.text(unitText, unitX, unitY, { align: 'center' });
-    x += this.colWidths[4];
-
-    // Quantity cell with better styling
-    doc.setFontSize(9); 
-    doc.setFont('helvetica', 'bold');  // Bold for quantity
-    const qtyText = String(product.quantity); 
-    const qtyX = x + this.colWidths[5] / 2; 
-    const qtyY = rowY + rowHeight / 2 + 2; 
-    doc.text(qtyText, qtyX, qtyY, { align: 'center' });
-    x += this.colWidths[5];
-
-    // Unit Price cell with enhanced styling
-    doc.setFontSize(9); 
-    doc.setFont('helvetica', 'bold');
-    const priceText = Number(product.unitPrice).toFixed(2); 
-    const priceX = x + this.colWidths[6] - padding; 
-    const priceY = rowY + rowHeight / 2 + 2; 
-    doc.text(priceText, priceX, priceY, { align: 'right' });
-    x += this.colWidths[6];
-
-    // Total cell with enhanced styling
-    const total = (product.unitPrice * product.quantity) || 0; 
-    doc.setFont('helvetica', 'bold'); 
-    doc.setFontSize(10);  // Slightly larger for emphasis
-    doc.setTextColor(...PDF_CONFIG.colors.accent);
-    const totalText = Number(total).toFixed(2); 
-    const totalX = x + this.colWidths[7] - padding; 
-    const totalY = rowY + rowHeight / 2 + 2; 
-    doc.text(totalText, totalX, totalY, { align: 'right' });
-
-    layout.moveDown(rowHeight + PDF_CONFIG.table.rowGap);
+  } else {
+    this.renderEnhancedImagePlaceholder(x, rowY, this.colWidths[3], rowHeight, product.name);
   }
+  
+  if (this.debug) {
+    this._debugBox(x, rowY, this.colWidths[3], rowHeight, 7, []);
+  }
+  x += this.colWidths[3];
+
+  // Unit column
+  doc.setFont('helvetica', 'normal'); 
+  doc.setFontSize(9); 
+  doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+  const unitText = String(product.unit).toUpperCase(); 
+  const unitX = x + this.colWidths[4] / 2; 
+  const unitY = rowY + rowHeight / 2 + 2; 
+  doc.text(unitText, unitX, unitY, { align: 'center' });
+  x += this.colWidths[4];
+
+  // Quantity column - FIXED: This should show "Qty" not "City"
+  doc.setFontSize(9); 
+  doc.setFont('helvetica', 'bold');
+  const qtyText = String(product.quantity); 
+  const qtyX = x + this.colWidths[5] / 2; 
+  const qtyY = rowY + rowHeight / 2 + 2; 
+  doc.text(qtyText, qtyX, qtyY, { align: 'center' });
+  x += this.colWidths[5];
+
+  // Unit Price column
+  doc.setFontSize(9); 
+  doc.setFont('helvetica', 'bold');
+  const priceText = Number(product.unitPrice).toFixed(2); 
+  const priceX = x + this.colWidths[6] - padding; 
+  const priceY = rowY + rowHeight / 2 + 2; 
+  doc.text(priceText, priceX, priceY, { align: 'right' });
+  x += this.colWidths[6];
+
+  // Total column
+  const total = (product.unitPrice * product.quantity) || 0; 
+  doc.setFont('helvetica', 'bold'); 
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_CONFIG.colors.accent);
+  const totalText = Number(total).toFixed(2); 
+  const totalX = x + this.colWidths[7] - padding; 
+  const totalY = rowY + rowHeight / 2 + 2; 
+  doc.text(totalText, totalX, totalY, { align: 'right' });
+
+  layout.moveDown(rowHeight + PDF_CONFIG.table.rowGap);
+}
 
   renderEnhancedImagePlaceholder(x, y, w, h, productName) {
     const doc = this.doc;
     const padding = PDF_CONFIG.table.cellPadding;
 
-    // Enhanced placeholder with gradient-like background
     doc.setFillColor(250, 250, 250);
     doc.roundedRect(x + padding, y + padding, w - padding * 2, h - padding * 2, 3, 3, 'F');
 
-    // Better border
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.5);
     doc.roundedRect(x + padding, y + padding, w - padding * 2, h - padding * 2, 3, 3);
@@ -1014,17 +1101,12 @@ class EMCProposalPDF {
     const textX = x + (w - textWidth) / 2;
     const textY = y + h / 2 + 2;
 
-    // Camera icon representation
-    const centerX = x + w / 2;
-    const centerY = y + h / 2;
-    
-    // Draw simple camera icon
     doc.setFillColor(180, 180, 180);
-    doc.roundedRect(centerX - 4, centerY - 6, 8, 6, 1, 1, 'F');
+    doc.roundedRect(textX - 4, textY - 6, 8, 6, 1, 1, 'F');
     doc.setFillColor(200, 200, 200);
-    doc.circle(centerX, centerY, 3, 'F');
+    doc.circle(textX, textY, 3, 'F');
 
-    doc.text(placeholderText, textX, textY);
+    doc.text(placeholderText, textX, textY + 8);
   }
 
   renderTotals() { 
@@ -1050,15 +1132,12 @@ class EMCProposalPDF {
         this.layout.addPage(); 
       }
       
-      // Enhanced label background with borders
       doc.setFillColor(...r.bg); 
       doc.roundedRect(labelStartX, this.layout.getY(), totalLabelWidth, rowH, 1, 1, 'F');
       
-      // Enhanced value background  
       doc.setFillColor(...r.bg);
       doc.roundedRect(valueStartX, this.layout.getY(), totalValueWidth, rowH, 1, 1, 'F');
       
-      // Borders
       doc.setDrawColor(...PDF_CONFIG.colors.mediumGray);
       doc.rect(labelStartX, this.layout.getY(), totalLabelWidth, rowH);
       doc.rect(valueStartX, this.layout.getY(), totalValueWidth, rowH);
@@ -1067,10 +1146,8 @@ class EMCProposalPDF {
       doc.setFontSize(9); 
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
       
-      // Label
       doc.text(r.label, labelStartX + totalLabelWidth - 5, this.layout.getY() + 6, { align: 'right' });
       
-      // Value
       doc.setTextColor(...PDF_CONFIG.colors.accent);
       doc.text(Number(r.value).toFixed(2), valueStartX + totalValueWidth - 5, this.layout.getY() + 6, { align: 'right' });
       
@@ -1095,7 +1172,6 @@ class EMCProposalPDF {
     doc.setFontSize(9);
     doc.setTextColor(...PDF_CONFIG.colors.darkGray);
     
-    // Use actual terms from database
     const notes = [
       { label: '1. Payment Terms:', text: this.data.terms.payment },
       { label: '2. Delivery Time:', text: this.data.terms.deliveryTime },
@@ -1106,22 +1182,18 @@ class EMCProposalPDF {
     
     const bulletIndent = 5; 
     const lineHeight = this.lineHeightForFontSize(9);
-    const labelSpacing = 2; // space between label and text
+    const labelSpacing = 2;
     
     notes.forEach(note => { 
-      // Process each note separately for better control
       const labelText = note.label;
       const valueText = note.text;
       
-      // Measure label width
       doc.setFont('helvetica', 'bold'); 
       doc.setFontSize(9);
       const labelWidth = doc.getTextWidth(labelText);
       
-      // Calculate available width for value text
       const availableWidth = layout.pageWidth - margin * 2 - bulletIndent - labelWidth - labelSpacing;
       
-      // Wrap value text
       doc.setFont('helvetica', 'normal');
       const valueLines = doc.splitTextToSize(valueText, availableWidth);
       
@@ -1131,13 +1203,11 @@ class EMCProposalPDF {
         layout.addPage(); 
       }
       
-      // Render label
       doc.setFont('helvetica', 'bold'); 
       doc.setFontSize(9); 
       doc.setTextColor(...PDF_CONFIG.colors.primary);
       doc.text(labelText, margin + bulletIndent, layout.getY());
       
-      // Render value text with proper spacing
       doc.setFont('helvetica', 'normal'); 
       doc.setTextColor(...PDF_CONFIG.colors.darkGray);
       
@@ -1145,16 +1215,13 @@ class EMCProposalPDF {
       
       valueLines.forEach((line, index) => {
         if (index === 0) {
-          // First line on same line as label
           doc.text(line, textStartX, layout.getY());
         } else {
-          // Continuation lines indented to align with first line
           layout.moveDown(lineHeight);
           doc.text(line, textStartX, layout.getY());
         }
       });
       
-      // Move down for next item
       layout.moveDown(lineHeight + 2);
       
       if (this.debug) {
@@ -1177,17 +1244,14 @@ class EMCProposalPDF {
     
     const sigY = layout.getY();
     
-    // Enhanced signature section with better styling
     const sectionWidth = (layout.pageWidth - margin * 2 - 10) / 2;
     
-    // Left side - Company stamp area
     const leftX = margin;
     doc.setFont('helvetica', 'bold'); 
     doc.setFontSize(10); 
     doc.setTextColor(...PDF_CONFIG.colors.primary);
     doc.text(`For ${this._toPlainString(this.data.company.shortName)}`, leftX, sigY);
     
-    // Enhanced stamp area
     doc.setDrawColor(...PDF_CONFIG.colors.primary);
     doc.setLineWidth(0.8);
     doc.setLineDash([1, 1], 0);
@@ -1199,23 +1263,19 @@ class EMCProposalPDF {
     doc.setTextColor(150, 150, 150);
     doc.text('Company Stamp Area', leftX + (sectionWidth - 5) / 2, sigY + 18, { align: 'center' });
     
-    // Right side - Signature
     const rightX = margin + sectionWidth + 10;
     doc.setFont('helvetica', 'bold'); 
     doc.setFontSize(10); 
     doc.setTextColor(...PDF_CONFIG.colors.primary);
     doc.text('Authorized Signature', rightX, sigY);
     
-    // Enhanced signature line
     layout.drawLine(rightX, sigY + 20, rightX + sectionWidth - 5, sigY + 20, PDF_CONFIG.colors.primary, 0.8);
     
-    // Signatory name
     doc.setFont('helvetica', 'bold'); 
     doc.setFontSize(10); 
     doc.setTextColor(...PDF_CONFIG.colors.accent);
     doc.text(this._toPlainString(this.data.signatory), rightX + (sectionWidth - 5) / 2, sigY + 28, { align: 'center' });
     
-    // Position title
     doc.setFont('helvetica', 'normal'); 
     doc.setFontSize(8); 
     doc.setTextColor(...PDF_CONFIG.colors.darkGray);
@@ -1224,7 +1284,6 @@ class EMCProposalPDF {
     layout.moveDown(needed);
   }
 
-  // render partner logos using preloaded images
   renderLogos() { 
     const doc = this.doc; 
     const layout = this.layout; 
@@ -1234,11 +1293,9 @@ class EMCProposalPDF {
       layout.addPage();
     }
     
-    // separator line
     layout.drawLine(margin, layout.getY(), layout.pageWidth - margin, layout.getY(), PDF_CONFIG.colors.primary, 0.5);
     layout.moveDown(8);
     
-    // Title
     doc.setFont('helvetica', 'bold'); 
     doc.setFontSize(9); 
     doc.setTextColor(...PDF_CONFIG.colors.primary);
@@ -1330,7 +1387,6 @@ class EMCProposalPDF {
     doc.text('LOGO', x + w / 2, y + h - 4, { align: 'center' });
   }
 
-  // Add this method to avoid runtime error
   async loadPartnerLogos() {
     const partnerUrls = [
       'https://i.ibb.co/Kc08wPDR/Whats-App-Image-2025-10-21-at-13-34-35-4adb7bae.jpg',
@@ -1341,7 +1397,6 @@ class EMCProposalPDF {
       'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
       'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
       'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
-     
       'https://i.ibb.co/0N2C13p/Whats-App-Image-2025-10-22-at-15-57-33-e016779a.jpg'
     ];
     const loaded = [];
@@ -1364,17 +1419,14 @@ class EMCProposalPDF {
     const y = layout.getY(); 
     const pageW = layout.pageWidth; 
 
-    // Logo dimensions
     const logoW = PDF_CONFIG.images.logoWidth;
     const logoH = PDF_CONFIG.images.logoHeight;
     const headerPadding = PDF_CONFIG.spacing.md;
     const headerContentWidth = pageW - margin * 2;
 
-    // Allocate more space to company info, less to metadata
     const companyInfoWidth = headerContentWidth * 0.65;
     const metadataWidth = headerContentWidth * 0.35;
 
-    // Company info with smaller fonts for contact details
     const companyNameFit = this.measurer.fitFontSizeToBox(
       this.data.company.name, 
       'helvetica', 
@@ -1412,7 +1464,6 @@ class EMCProposalPDF {
       layout.addPage();
     }
 
-    // Render logo
     const logoX = margin;
     const logoY = y + (headerHeight - logoH) / 2;
     let logoToUse = null;
@@ -1444,11 +1495,9 @@ class EMCProposalPDF {
       this.renderLogoPlaceholder(doc, logoX, logoY, logoW, logoH, this.data.company.shortName);
     }
 
-    // Company info (left side)
     const infoX = logoX + logoW + PDF_CONFIG.spacing.sm;
     const infoY = y + headerPadding;
 
-    // Company name
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(companyNameFit.fontSize);
     doc.setTextColor(...PDF_CONFIG.colors.primary);
@@ -1458,7 +1507,6 @@ class EMCProposalPDF {
 
     let currentY = infoY + companyNameFit.totalHeight + 2;
 
-    // Contact info
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(contactFit1.fontSize);
     doc.setTextColor(...PDF_CONFIG.colors.darkGray);
@@ -1482,12 +1530,9 @@ class EMCProposalPDF {
       doc.text(line, infoX, currentY + i * this.lineHeightForFontSize(contactFit5.fontSize));
     });
 
-    // --- Fix: Always render metadata BELOW company info if not enough space ---
-
-    // Calculate the right block's starting Y: max(infoY, currentY)
     let metadataStartY = infoY;
     if (currentY > infoY + 2) {
-      metadataStartY = currentY + 2; // add a little gap
+      metadataStartY = currentY + 2;
     }
 
     const metadataX = pageW - margin;
@@ -1509,7 +1554,6 @@ class EMCProposalPDF {
     doc.text(`Date: ${this.data.metadata.date}`, metadataX, metadataStartY, { align: 'right' });
     metadataStartY += 5;
 
-    // Recipient (wrapped if needed)
     const recipientFit = this.measurer.fitFontSizeToBox(
       this.data.metadata.recipient, 
       'helvetica', 
@@ -1522,7 +1566,6 @@ class EMCProposalPDF {
       doc.text(line, metadataX, metadataStartY + (i * 4), { align: 'right' });
     });
 
-    // RED LINE
     const redLineY = y + headerHeight + PDF_CONFIG.spacing.sm;
     layout.drawLine(margin, redLineY, pageW - margin, redLineY, PDF_CONFIG.colors.redLine, 1);
     layout.setY(redLineY + PDF_CONFIG.spacing.md);
@@ -1531,18 +1574,18 @@ class EMCProposalPDF {
       this._debugBox(infoX, infoY, companyInfoWidth, totalTextHeight, companyNameFit.fontSize, companyNameFit.lines);
       this._debugBox(metadataX - metadataWidth, metadataStartY, metadataWidth, 25, 8, []);
     }
-}
+  }
 
-renderLogoPlaceholder(doc, x, y, w, h, text) {
+  renderLogoPlaceholder(doc, x, y, w, h, text) {
     doc.setFillColor(...PDF_CONFIG.colors.primary);
     doc.roundedRect(x, y, w, h, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(255, 255, 255);
     doc.text(text, x + w / 2, y + h / 2 + 1, { align: 'center' });
-}
+  }
 
-renderTitle() { 
+  renderTitle() { 
     const doc = this.doc; 
     const layout = this.layout; 
     const centerX = layout.pageWidth / 2; 
@@ -1559,108 +1602,80 @@ renderTitle() {
       this._debugBox(PDF_CONFIG.page.margin, layout.getY(), titleBoxW, 14, titleFit.fontSize, titleFit.lines);
     }
     layout.moveDown(18);
-}
-
-renderIntro() { 
-  const doc = this.doc; 
-  const layout = this.layout; 
-  const margin = PDF_CONFIG.page.margin; 
-  const before = this.data.isTechnical 
-    ? 'We are pleased to present our technical offer from '
-    : 'We are pleased to present our commercial offer from ';
-  const company = this.data.company.name;
-  const after = this.data.isTechnical
-    ? ' for the supply of technical equipment and services as detailed below:'
-    : ' for the supply of high-quality products as detailed below:';
-  const availableWidth = layout.pageWidth - margin * 2;
-  const boxPadding = 6;
-  const maxTextWidth = availableWidth - (boxPadding * 2);
-  const introText = before + company + after;
-  const introFit = this.measurer.fitFontSizeToBox(
-    introText, 
-    'helvetica', 
-    PDF_CONFIG.fonts.bodySize, 
-    9, 
-    maxTextWidth, 
-    50, 
-    1.3
-  );
-  const lineHeight = this.lineHeightForFontSize(introFit.fontSize);
-  const boxHeight = Math.max(30, introFit.totalHeight + 10);
-  doc.setFillColor(...PDF_CONFIG.colors.lightGray);
-  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3, 'F');
-  doc.setDrawColor(...PDF_CONFIG.colors.primary);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3);
-   const textY = layout.getY() + boxPadding;
-  let currentX = margin + boxPadding;
-  let currentY = textY;
-  for (let lineIndex = 0; lineIndex < introFit.lines.length; lineIndex++) {
-    const line = introFit.lines[lineIndex];
-    currentX = margin + boxPadding;
-    if (line.includes(company)) {
-      const beforeIndex = line.indexOf(before);
-      const companyIndex = line.indexOf(company);
-      if (companyIndex > -1) {
-        const beforeText = line.substring(0, companyIndex);
-        if (beforeText) {
-          doc.setFont('helvetica', 'normal');
-         
-          doc.setFontSize(introFit.fontSize);
-          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-          doc.text(beforeText, currentX, currentY);
-          currentX += doc.getTextWidth(beforeText);
-        }
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...PDF_CONFIG.colors.accent);
-        doc.text(company, currentX, currentY);
-        currentX += doc.getTextWidth(company);
-        const afterText = line.substring(companyIndex + company.length);
-        if (afterText) {
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-          doc.text(afterText, currentX, currentY);
-        }
-      }
-    } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(introFit.fontSize);
-      doc.setTextColor(...PDF_CONFIG.colors.darkGray);
-      doc.text(line, currentX, currentY);
-    }
-    currentY += lineHeight;
   }
-  if (this.debug) {
-    this._debugBox(margin, layout.getY(), availableWidth, boxHeight, introFit.fontSize, introFit.lines);
-  }
-  layout.moveDown(boxHeight + 4);
-}
 
-  // 2. Replace your loadPartnerLogos with this:
-async loadPartnerLogos() {
-    const partnerUrls = [
-      'https://i.ibb.co/Kc08wPDR/Whats-App-Image-2025-10-21-at-13-34-35-4adb7bae.jpg',
-      'https://i.ibb.co/QFwSvL9x/Whats-App-Image-2025-10-21-at-13-34-35-74d70f65.jpg',
-      'https://i.ibb.co/wZwb8gCL/Whats-App-Image-2025-10-21-at-13-34-35-0976c6a2.jpg',
-      'https://i.ibb.co/3Yscy8Rd/Whats-App-Image-2025-10-21-at-13-34-35-523241c3.jpg',
-      'https://i.ibb.co/cK0XdCJc/Whats-App-Image-2025-10-21-at-13-34-35-cace941f.jpg',
-      'https://i.ibb.co/ZzCh1L7F/Whats-App-Image-2025-10-21-at-13-34-35-2932b94c.jpg',
-      'https://i.ibb.co/zH6MRy77/Whats-App-Image-2025-10-21-at-13-35-41-3188f9a7.jpg',
-      'https://i.ibb.co/nqJM2YcF/Whats-App-Image-2025-10-21-at-13-35-41-b5c1f037.jpg',
-    
-      'https://i.ibb.co/0N2C13p/Whats-App-Image-2025-10-22-at-15-57-33-e016779a.jpg'
-    ];
-    const loaded = [];
-    for (const url of partnerUrls) {
-      try {
-        const meta = await this.imageLoader.loadImage(url, PDF_CONFIG.images.maxDimensionPx);
-        loaded.push(meta || null);
-      } catch (e) {
-        console.warn('Failed to load partner logo', e);
-        loaded.push(null);
+  renderIntro() { 
+    const doc = this.doc; 
+    const layout = this.layout; 
+    const margin = PDF_CONFIG.page.margin; 
+    const before = this.data.isTechnical 
+      ? 'We are pleased to present our technical offer from '
+      : 'We are pleased to present our commercial offer from ';
+    const company = this.data.company.name;
+    const after = this.data.isTechnical
+      ? ' for the supply of technical equipment and services as detailed below:'
+      : ' for the supply of high-quality products as detailed below:';
+    const availableWidth = layout.pageWidth - margin * 2;
+    const boxPadding = 6;
+    const maxTextWidth = availableWidth - (boxPadding * 2);
+    const introText = before + company + after;
+    const introFit = this.measurer.fitFontSizeToBox(
+      introText, 
+      'helvetica', 
+      PDF_CONFIG.fonts.bodySize, 
+      9, 
+      maxTextWidth, 
+      50, 
+      1.3
+    );
+    const lineHeight = this.lineHeightForFontSize(introFit.fontSize);
+    const boxHeight = Math.max(30, introFit.totalHeight + 10);
+    doc.setFillColor(...PDF_CONFIG.colors.lightGray);
+    doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3, 'F');
+    doc.setDrawColor(...PDF_CONFIG.colors.primary);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, layout.getY(), availableWidth, boxHeight, 3, 3);
+    const textY = layout.getY() + boxPadding;
+    let currentX = margin + boxPadding;
+    let currentY = textY;
+    for (let lineIndex = 0; lineIndex < introFit.lines.length; lineIndex++) {
+      const line = introFit.lines[lineIndex];
+      currentX = margin + boxPadding;
+      if (line.includes(company)) {
+        const beforeIndex = line.indexOf(before);
+        const companyIndex = line.indexOf(company);
+        if (companyIndex > -1) {
+          const beforeText = line.substring(0, companyIndex);
+          if (beforeText) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(introFit.fontSize);
+            doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+            doc.text(beforeText, currentX, currentY);
+            currentX += doc.getTextWidth(beforeText);
+          }
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...PDF_CONFIG.colors.accent);
+          doc.text(company, currentX, currentY);
+          currentX += doc.getTextWidth(company);
+          const afterText = line.substring(companyIndex + company.length);
+          if (afterText) {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+            doc.text(afterText, currentX, currentY);
+          }
+        }
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(introFit.fontSize);
+        doc.setTextColor(...PDF_CONFIG.colors.darkGray);
+        doc.text(line, currentX, currentY);
       }
+      currentY += lineHeight;
     }
-    return loaded;
+    if (this.debug) {
+      this._debugBox(margin, layout.getY(), availableWidth, boxHeight, introFit.fontSize, introFit.lines);
+    }
+    layout.moveDown(boxHeight + 4);
   }
 
   _debugBox(x, y, w, h, fontSizePt, lines) {
@@ -1679,7 +1694,6 @@ async loadPartnerLogos() {
   }
 
   async renderDocument() {
-    // Render the PDF sections in order
     this.renderHeader();
     this.renderTitle();
     this.renderIntro();
