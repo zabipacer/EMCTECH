@@ -322,26 +322,49 @@ export default function ProductManagement() {
   }, [deleteProducts, showToast]);
 
  // Enhanced import handler with intelligent field detection and auto-generation
-// Enhanced import handler for commercial offers and standard products
+// Completely fixed import handler - no more "code is not defined" error
 const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) => {
   let imported = 0;
   let failed = 0;
   const errors = [];
 
-  // Helper function to extract meaningful product name
+  // Safe helper function to extract product name
   const extractProductName = (rawData) => {
-    if (rawData.name) return rawData.name;
-    if (rawData.description) return rawData.description;
-    if (rawData.product) return rawData.product;
-    if (rawData.item) return rawData.item;
+    // Check all possible name fields safely
+    const nameFields = [
+      'name', 'Name', 'product', 'Product', 'item', 'Item',
+      'description', 'Description', 'title', 'Title',
+      'Product Name (EN)', 'Product Name', 'ProductName',
+      'technical', 'Technical', 'Technical Details'
+    ];
     
-    // Try to find any string field that could be a name
-    for (const [key, value] of Object.entries(rawData)) {
-      if (typeof value === 'string' && value.length > 5 && value.length < 100) {
-        const lowerKey = key.toLowerCase();
-        if (!lowerKey.includes('price') && !lowerKey.includes('quantity') && 
-            !lowerKey.includes('sku') && !lowerKey.includes('code')) {
-          return value;
+    for (const field of nameFields) {
+      if (rawData[field] !== undefined && rawData[field] !== null && rawData[field] !== '') {
+        const nameValue = String(rawData[field]).trim();
+        if (nameValue.length > 0) {
+          return nameValue;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  // Safe helper function to extract SKU - NO MORE "code" VARIABLE ISSUE
+  const extractSKU = (rawData) => {
+    // Check all possible SKU fields safely
+    const skuFields = [
+      'sku', 'SKU', 'code', 'Code', 'id', 'ID', 
+      'product-code', 'product_code', 'product code',
+      'item code', 'item_code', 'model', 'model number',
+      'Item Code', 'Product Code'
+    ];
+    
+    for (const field of skuFields) {
+      if (rawData[field] !== undefined && rawData[field] !== null && rawData[field] !== '') {
+        const skuValue = String(rawData[field]).trim();
+        if (skuValue.length > 0) {
+          return skuValue;
         }
       }
     }
@@ -354,9 +377,26 @@ const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) 
     if (value === null || value === undefined) return 0;
     if (typeof value === 'number') return value;
     
-    const str = String(value).replace(/[^\d.,]/g, '');
-    const num = parseFloat(str.replace(',', ''));
-    return isNaN(num) ? 0 : num;
+    try {
+      const str = String(value).replace(/[^\d.,]/g, '');
+      const num = parseFloat(str.replace(',', ''));
+      return isNaN(num) ? 0 : num;
+    } catch (e) {
+      return 0;
+    }
+  };
+
+  // Helper function to safely get field value
+  const safeGetField = (rawData, fieldNames, defaultValue = '') => {
+    for (const field of fieldNames) {
+      if (rawData[field] !== undefined && rawData[field] !== null && rawData[field] !== '') {
+        const value = String(rawData[field]).trim();
+        if (value.length > 0) {
+          return value;
+        }
+      }
+    }
+    return defaultValue;
   };
 
   for (const [index, raw] of productsFromFile.entries()) {
@@ -374,64 +414,28 @@ const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) 
 
       console.log(`Processing row ${index + 1}:`, raw);
 
-      // Extract product information with flexible field detection
+      // SAFELY extract product information - no more direct property access
       const productName = extractProductName(raw);
-      let productSku = raw.sku || raw.code || raw.id || raw.product-code;
+      const productSku = extractSKU(raw);
       
       // Auto-generate name and SKU if not found
-      const finalName = productName || `Commercial Item ${index + 1}`;
-      
-      if (!productSku) {
-        const cleanName = finalName.toString().trim().toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
-        productSku = `IMP-${cleanName}-${index + 1}`;
-      }
+      const finalName = productName || `Product ${index + 1}`;
+      const finalSku = productSku || `IMP-${index + 1}-${Date.now().toString(36)}`;
 
-      // Extract pricing and quantity information
-      let price = 0;
-      let cost = 0;
-      let quantity = 1;
+      // SAFELY extract pricing and quantity information
+      const priceFields = ['price', 'Price', 'unit price', 'Price ($)', 'cost', 'Cost', 'amount'];
+      const quantityFields = ['quantity', 'Quantity', 'qty', 'stock', 'Stock', 'No. of Unit'];
+      const costFields = ['cost', 'Cost', 'unit cost', 'purchase price'];
+      const descriptionFields = ['description', 'Description', 'details', 'technical'];
+      const categoryFields = ['category', 'Category', 'type'];
+      const vendorFields = ['vendor', 'Vendor', 'company', 'Company', 'brand'];
 
-      // Try different field names for price
-      const priceFields = ['price', 'unit price', 'price per unit', 'cost', 'amount', 'rate'];
-      for (const field of priceFields) {
-        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
-          price = extractNumericValue(raw[field]);
-          if (price > 0) break;
-        }
-      }
-
-      // Try different field names for quantity
-      const quantityFields = ['quantity', 'qty', 'number of units', 'no. of unit', 'count', 'units'];
-      for (const field of quantityFields) {
-        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
-          quantity = extractNumericValue(raw[field]);
-          if (quantity > 0) break;
-        }
-      }
-
-      // Try different field names for cost
-      const costFields = ['cost', 'unit cost', 'purchase price', 'wholesale'];
-      for (const field of costFields) {
-        if (raw[field] !== undefined && raw[field] !== null && raw[field] !== '') {
-          cost = extractNumericValue(raw[field]);
-          if (cost > 0) break;
-        }
-      }
-
-      // If cost not found but price exists, set cost as 80% of price (typical margin)
-      if (cost === 0 && price > 0) {
-        cost = price * 0.8;
-      }
-
-      // Extract description
-      let description = raw.description || raw.details || raw.technical || raw.notes || finalName;
-
-      // Extract category from description or use default
-      let category = raw.category || 'Commercial Products';
-      if (description.toLowerCase().includes('lock')) category = 'Safety Locks';
-      if (description.toLowerCase().includes('chain')) category = 'Safety Chains';
-      if (description.toLowerCase().includes('box')) category = 'Storage Solutions';
-      if (description.toLowerCase().includes('cabinet')) category = 'Storage Solutions';
+      const price = extractNumericValue(safeGetField(raw, priceFields, '0'));
+      const quantity = extractNumericValue(safeGetField(raw, quantityFields, '1'));
+      const cost = extractNumericValue(safeGetField(raw, costFields, '0')) || (price > 0 ? price * 0.8 : 0);
+      const description = safeGetField(raw, descriptionFields, finalName);
+      const category = safeGetField(raw, categoryFields, 'General');
+      const vendor = safeGetField(raw, vendorFields, 'Default Supplier');
 
       // Create the final product object
       const product = {
@@ -441,20 +445,20 @@ const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) 
           RU: "", 
           UZ: "" 
         },
-        sku: productSku.toString().trim(),
-        price: price,
-        cost: cost,
-        stock: quantity,
+        sku: finalSku,
+        price: Math.max(0, price),
+        cost: Math.max(0, cost),
+        stock: Math.max(0, quantity),
         lowStockThreshold: 5,
         category: category,
         status: "draft",
-        company: "Teknik Group",
+        company: vendor,
         description: description,
         thumbnail: "",
         seo: {
-          slug: "",
-          title: "",
-          description: ""
+          slug: finalName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          title: finalName,
+          description: description.substring(0, 160)
         },
         specs: [],
         createdAt: new Date().toISOString(),
@@ -463,15 +467,11 @@ const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) 
 
       // Final validation
       if (!product.name.EN || product.name.EN.trim() === '') {
-        throw new Error("Could not determine product name");
+        throw new Error("Product name is required");
       }
 
-      if (product.price < 0) {
-        product.price = 0;
-      }
-
-      if (product.stock < 0) {
-        product.stock = 0;
+      if (!product.sku || product.sku.trim() === '') {
+        throw new Error("SKU is required");
       }
 
       console.log('Saving product:', product);
@@ -495,7 +495,7 @@ const handleImport = useCallback(async (productsFromFile, detectedMapping = {}) 
   };
 
   // Show toast notification
-  let toastMessage = `Imported ${imported} products`;
+  let toastMessage = `Successfully imported ${imported} products`;
   let toastType = "success";
   
   if (failed > 0) {
